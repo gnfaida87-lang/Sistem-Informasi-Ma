@@ -17,14 +17,14 @@ class SupabaseConfig {
   // Contoh: 'https://abcdefghij.supabase.co'
   static const String url = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'YOUR_SUPABASE_URL',
+    defaultValue: 'https://dmkuvecsaldnmzrddctj.supabase.co',
   );
 
   // Ganti dengan anon key project Supabase Anda
   // Contoh: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
   static const String anonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: 'YOUR_SUPABASE_ANON_KEY',
+    defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRta3V2ZWNzYWxkbm16cmRkY3RqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMzA4NjMsImV4cCI6MjA5MzYwNjg2M30.6IKuo2Ibjfro67CG_ksnCMcu1QnuOxT3ySi4N3mApq0',
   );
 
   /// Cek apakah konfigurasi sudah diisi
