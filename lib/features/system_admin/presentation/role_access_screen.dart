@@ -24,29 +24,38 @@ class _RoleAccessScreenState extends State<RoleAccessScreen> {
 
   // State simulasi untuk mapping menu (Akan dihubungkan dengan RLS / API)
   final Map<String, bool> _menuAccess = {
-    '1. Dashboard Sistem Aktifitas': false,
-    '2. Manajemen & Konfigurasi User': false,
-    '3. Master Data (Kelola Siswa, Guru, Kelas)': false,
-    '4. Jadwal & Standar Akademik Akhir (Wakakur)': false,
-    '5. Sistem Pembayaran & Tabungan (Keuangan)': false,
-    '6. Absensi & Penilaian Harian (Operasional Guru)': true,
-    '7. Upload Materi CBT & Koreksi Tugas': true,
-    '8. Rapor & Jadwal Akademik (View Only)': false,
+    '1. Dashboard Sistem & Aktifitas (User Activity, Logs)': false,
+    '2. Manajemen User & Security (Role, Hak Akses)': false,
+    '3. Master Data Siswa': false,
+    '4. Master Data Guru': false,
+    '5. Master Data Kelas & Rombel': false,
+    '6. Master Data Mata Pelajaran': false,
+    '7. Manajemen Bimbel': false,
+    '8. Konfigurasi Periode Akademik': false,
+    '9. Jadwal Akademik': false,
+    '10. Absensi Harian Siswa': false,
+    '11. Input Nilai & Tugas': false,
+    '12. Validasi Nilai & Cetak Rapor': false,
+    '13. Sistem Pembayaran & Keuangan': false,
+    '14. Pengumuman Sekolah': false,
+    '15. Integrasi AI & API': false,
   };
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Role & Hak Akses'),
-        backgroundColor: Colors.orange.shade800, // Warna Indikator dari Dashboard
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Custom Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              color: Colors.orange.shade800,
+              child: const Text('Role & Hak Akses', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            ),
             // Informasi Aturan Keras (Dari Dokumen ERD)
             Container(
               width: double.infinity,
@@ -87,7 +96,8 @@ class _RoleAccessScreenState extends State<RoleAccessScreen> {
                   if (val != null) {
                     setState(() {
                       _selectedRole = val;
-                      // Logic di sini: Fetch menu list permissions for this _selectedRole dari DB
+                      // Reset to mock state based on role
+                      _menuAccess.updateAll((key, value) => val == 'SUPERADMIN');
                     });
                   }
                 },

@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/router/app_router.dart';
+import '../../core/network/supabase_service.dart';
 import 'headmaster_academic_report.dart';
 import 'headmaster_finance_report.dart';
 import 'headmaster_announcement.dart';
@@ -14,6 +18,59 @@ class HeadmasterDashboardScreen extends StatefulWidget {
 
 class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
   int _selectedIndex = 0;
+  bool _isLoading = true;
+  
+  // Real Statistics
+  int _totalSiswa = 0;
+  int _totalGuru = 0;
+  double _avgAttendance = 96.5; // Dummy until absensi table exists
+  String _totalFinance = "Rp 0";
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchExecutiveSummary();
+  }
+
+  Future<void> _fetchExecutiveSummary() async {
+    setState(() => _isLoading = true);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      
+      if (user != null) {
+        // ── JALUR RIIL (SUPABASE) ────────────────────────
+        final client = SupabaseService().client;
+        final siswaCount = await client.from('siswa').select('id').filter('status', 'eq', 'active');
+        final guruCount = await client.from('guru').select('id');
+        
+        if (mounted) {
+          setState(() {
+            _totalSiswa = (siswaCount as List).length;
+            _totalGuru = (guruCount as List).length;
+            _totalFinance = "Rp 0";
+            _isLoading = false;
+          });
+        }
+      } else {
+        // ── JALUR DEMO (SIMULASI DATA) ───────────────────
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (mounted) {
+          setState(() {
+            _totalSiswa = 1250;
+            _totalGuru = 84;
+            _totalFinance = "Rp 124.5M";
+            _avgAttendance = 98.2;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching executive summary: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   final List<Map<String, dynamic>> _menuItems = [
     {'title': 'Dashboard Utama', 'icon': Icons.dashboard_outlined},
@@ -156,7 +213,7 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
           if (isDesktop)
             IconButton(
               icon: const Icon(Icons.menu_open, color: Colors.grey),
-              onPressed: () {},
+              onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           const SizedBox(width: 16),
           Container(
@@ -211,7 +268,7 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
               if (value == 'settings') {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()));
               } else if (value == 'logout') {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                context.go(AppRoutes.login);
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -305,10 +362,10 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _buildStatCard(Colors.blueAccent, '1,452', 'Total Siswa Aktif', Icons.people_alt),
-                  _buildStatCard(Colors.green, '96.5%', 'Rata-rata Kehadiran', Icons.how_to_reg),
-                  _buildStatCard(Colors.orangeAccent, '88.2%', 'Persentase Ketuntasan (KKM)', Icons.fact_check),
-                  _buildStatCard(Colors.purpleAccent, '124,5 Jt', 'Pemasukan SPP (Bulan Ini)', Icons.payments),
+                   _buildStatCard(Colors.blueAccent, _totalSiswa.toString(), 'Total Siswa Aktif', Icons.people_alt),
+                   _buildStatCard(Colors.green, '$_avgAttendance%', 'Rata-rata Kehadiran', Icons.how_to_reg),
+                   _buildStatCard(Colors.orangeAccent, '88.2%', 'Persentase Ketuntasan (KKM)', Icons.fact_check),
+                   _buildStatCard(Colors.purpleAccent, _totalFinance, 'Pemasukan SPP (Bulan Ini)', Icons.payments),
                 ],
               );
             },

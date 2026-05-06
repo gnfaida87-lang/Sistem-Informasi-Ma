@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/router/app_router.dart';
+import '../../core/mixins/safe_async_mixin.dart';
 import '../auth/presentation/login_screen.dart';
 import '../../shared/widgets/profile_settings_screen.dart';
 import 'finance_spp_payment.dart';
 import 'finance_other_fees.dart';
 import 'finance_operational_expenses.dart';
 import 'finance_reports.dart';
+import 'presentation/finance_student_savings.dart';
+import 'services/finance_service.dart';
+import 'models/finance_models.dart';
 
 class AdminFinanceDashboardScreen extends StatefulWidget {
   const AdminFinanceDashboardScreen({super.key});
@@ -13,16 +20,53 @@ class AdminFinanceDashboardScreen extends StatefulWidget {
   State<AdminFinanceDashboardScreen> createState() => _AdminFinanceDashboardScreenState();
 }
 
-class _AdminFinanceDashboardScreenState extends State<AdminFinanceDashboardScreen> {
+class _AdminFinanceDashboardScreenState extends State<AdminFinanceDashboardScreen> with SafeAsync {
   int _selectedIndex = 0;
+  final _financeService = FinanceService();
+  FinanceReport? _report;
 
   final List<Map<String, dynamic>> _menuItems = [
     {'title': 'Dashboard Keuangan', 'icon': Icons.account_balance_wallet_outlined},
     {'title': 'Pembayaran SPP', 'icon': Icons.receipt_long_outlined},
-    {'title': 'Biaya Lainnya', 'icon': Icons.payments_outlined},
+    {'title': 'Pemasukan/Biaya Lainnya', 'icon': Icons.payments_outlined},
+    {'title': 'Tabungan Siswa', 'icon': Icons.account_balance_wallet_outlined},
     {'title': 'Pengeluaran Operasional', 'icon': Icons.money_off_csred_outlined},
     {'title': 'Laporan & Rekap', 'icon': Icons.analytics_outlined},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData();
+  }
+
+  Future<void> _fetchDashboardData() async {
+    await safeCall(
+      context: context,
+      action: () async {
+        final user = Supabase.instance.client.auth.currentUser;
+        
+        if (user != null) {
+          // ── JALUR RIIL (SUPABASE) ────────────────────────
+          final data = await _financeService.fetchFinanceReport();
+          setState(() => _report = data);
+        } else {
+          // ── JALUR DEMO (SIMULASI DATA) ───────────────────
+          await Future.delayed(const Duration(milliseconds: 600));
+          setState(() {
+            _report = FinanceReport(
+              totalSppIn: 450000000,
+              totalOtherFees: 15000000,
+              totalExpenses: 120000000,
+              totalSavings: 250000000,
+              month: 'April',
+              year: '2026',
+            );
+          });
+        }
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -164,51 +208,18 @@ class _AdminFinanceDashboardScreenState extends State<AdminFinanceDashboardScree
               icon: const Icon(Icons.menu_open, color: Colors.grey),
               onPressed: () {},
             ),
-          const SizedBox(width: 16),
-          // Search Box - Shortcut Pencarian NISN untuk Tagihan
-          Container(
-            width: 300,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Cari NISN (Cek Tagihan / Bayar Cepat)',
-                        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                        border: InputBorder.none,
-                      ),
-                    ),
-                  ),
-                ),
-                Container(
-                  height: double.infinity,
-                  width: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade700,
-                    borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(8),
-                      bottomRight: Radius.circular(8),
-                    ),
-                  ),
-                  child: const Icon(Icons.search, color: Colors.white, size: 20),
-                ),
-              ],
-            ),
+          IconButton(
+            icon: Icon(Icons.refresh, color: Colors.green.shade700),
+            tooltip: 'Sinkronkan Data',
+            onPressed: isLoading ? null : _fetchDashboardData,
           ),
-          const Spacer(),
+          const SizedBox(width: 16),
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               const Text('Admin Keuangan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2B3674))),
-              Text('Loket & Bendahara', style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+              Text('Loket & Bendahara', style: TextStyle(color: Colors.grey.shade50, fontSize: 11)),
             ],
           ),
           const SizedBox(width: 12),
@@ -218,7 +229,7 @@ class _AdminFinanceDashboardScreenState extends State<AdminFinanceDashboardScree
               if (value == 'settings') {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()));
               } else if (value == 'logout') {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                context.go(AppRoutes.login);
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -262,8 +273,10 @@ class _AdminFinanceDashboardScreenState extends State<AdminFinanceDashboardScree
       case 2:
         return const FinanceOtherFees();
       case 3:
-        return const FinanceOperationalExpenses();
+        return const FinanceStudentSavings();
       case 4:
+        return const FinanceOperationalExpenses();
+      case 5:
         return const FinanceReports();
       default:
         return _buildMainContent();
@@ -276,60 +289,57 @@ class _AdminFinanceDashboardScreenState extends State<AdminFinanceDashboardScree
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Posisi Keuangan & Arus Kas',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2B3674)),
+          Row(
+            children: [
+              const Text(
+                'Posisi Keuangan & Arus Kas',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2B3674)),
+              ),
+              const Spacer(),
+              if (isLoading)
+                const CircularProgressIndicator(),
+            ],
           ),
           const SizedBox(height: 24),
 
-          // STATISTIK KARTU
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth > 800;
-              return GridView.count(
-                crossAxisCount: isDesktop ? 4 : (constraints.maxWidth > 500 ? 2 : 1),
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: isDesktop ? 2.0 : 2.5,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _buildStatCard(Colors.blueAccent, 'Rp 14.5M', 'Total Kas Internal Sekolah', Icons.account_balance),
-                  _buildStatCard(Colors.green, 'Rp 1.2M', 'Pemasukan Hari Ini', Icons.arrow_downward), // Inflow
-                  _buildStatCard(Colors.redAccent, 'Rp 450Jt', 'Pengeluaran Hari Ini', Icons.arrow_upward), // Outflow
-                  _buildStatCard(Colors.orange, '35', 'Siswa Belum Lunas SPP', Icons.warning_amber_rounded),
-                ],
-              );
-            },
-          ),
+          if (_report != null)
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isDesktop = constraints.maxWidth > 800;
+                return GridView.count(
+                  crossAxisCount: isDesktop ? 4 : (constraints.maxWidth > 500 ? 2 : 1),
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: isDesktop ? 2.0 : 2.5,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _buildStatCard(Colors.blueAccent, 'Rp ${_report!.netIncome.toStringAsFixed(0)}', 'Total Saldo Kas', Icons.account_balance),
+                    _buildStatCard(Colors.green, 'Rp ${_report!.totalSpp.toStringAsFixed(0)}', 'Total Pemasukan SPP', Icons.arrow_downward),
+                    _buildStatCard(Colors.redAccent, 'Rp ${_report!.totalOperationalExpenses.toStringAsFixed(0)}', 'Total Pengeluaran', Icons.arrow_upward),
+                    _buildStatCard(Colors.orange, 'Rp ${_report!.totalOtherFees.toStringAsFixed(0)}', 'Tagihan Lainnya', Icons.payments_outlined),
+                  ],
+                );
+              },
+            ),
           const SizedBox(height: 24),
-
-          // PANEL ARUS KAS & TRANSAKSI TERAKHIR
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth > 800;
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: isDesktop ? 5 : 1,
-                    child: _buildTransactionList(),
-                  ),
-                  if (isDesktop) const SizedBox(width: 24),
-                  if (isDesktop)
-                    Expanded(
-                      flex: 4,
-                      child: _buildCollectionProgress(),
-                    ),
-                ],
-              );
-            },
-          ),
           
-          if (!MediaQuery.of(context).size.width.isFinite || MediaQuery.of(context).size.width <= 800) ...[
-            const SizedBox(height: 24),
-            _buildCollectionProgress(),
-          ],
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10)],
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Ringkasan Keuangan Sekolah', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                SizedBox(height: 16),
+                Text('Gunakan menu di samping untuk melihat rincian pembayaran SPP, tagihan lainnya, dan laporan lengkap.'),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -365,123 +375,5 @@ class _AdminFinanceDashboardScreenState extends State<AdminFinanceDashboardScree
       ),
     );
   }
-
-  Widget _buildTransactionList() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Log Transaksi Hari Ini', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-              TextButton(onPressed: () {}, child: const Text('Ke Jurnal Lengkap')),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: MaterialStateProperty.all(Colors.green.shade50),
-              columns: const [
-                DataColumn(label: Text('Waktu', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Siswa/Keterangan', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Jenis', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Nominal', style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-              rows: [
-                _buildDataRow('10:45', 'Ahmad Rizal (XII IPA 1)', 'SPP April', 'Rp 250.000', Colors.green),
-                _buildDataRow('09:15', 'Nadia Safira (X IPS 2)', 'Daftar Ulang', 'Rp 1.500.000', Colors.green),
-                _buildDataRow('08:30', 'Bayar Listrik Sekolah', 'Pengeluaran', 'Rp 4.000.000', Colors.red),
-                _buildDataRow('07:50', 'Bagas Pramoedya (-)', 'Buku Paket', 'Rp 450.000', Colors.green),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  DataRow _buildDataRow(String waktu, String keterangan, String jenis, String nominal, Color nominalColor) {
-    return DataRow(
-      cells: [
-        DataCell(Text(waktu, style: TextStyle(color: Colors.grey.shade500))),
-        DataCell(Text(keterangan, style: const TextStyle(fontWeight: FontWeight.w500))),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(4)),
-            child: Text(jenis, style: TextStyle(color: Colors.grey.shade800, fontSize: 11)),
-          ),
-        ),
-        DataCell(Text(
-          nominalColor == Colors.red ? '- $nominal' : '+ $nominal', 
-          style: TextStyle(color: nominalColor, fontWeight: FontWeight.bold)
-        )),
-      ],
-    );
-  }
-
-  Widget _buildCollectionProgress() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Kolektibilitas SPP (Bulan Berjalan)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-          const SizedBox(height: 24),
-          _buildProgressItem('Kelas X', 0.85, Colors.blue),
-          const SizedBox(height: 16),
-          _buildProgressItem('Kelas XI', 0.95, Colors.green),
-          const SizedBox(height: 16),
-          _buildProgressItem('Kelas XII', 0.70, Colors.orange),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.send),
-            label: const Text('Peringatkan Penunggak via WA'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade600,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 45),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgressItem(String label, double progress, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            Text('${(progress * 100).toInt()}%', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        LinearProgressIndicator(
-          value: progress,
-          backgroundColor: color.withOpacity(0.1),
-          valueColor: AlwaysStoppedAnimation<Color>(color),
-          minHeight: 8,
-          borderRadius: BorderRadius.circular(4),
-        )
-      ],
-    );
-  }
 }
+

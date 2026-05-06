@@ -1,14 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
-// Import semua dashboard yang sudah dibuat
-import '../../system_admin/presentation/superadmin_dashboard_screen.dart';
-import '../../dashboard/headmaster_dashboard_screen.dart';
-import '../../academic_config/wakakur_dashboard_screen.dart';
-import '../../master_data/operator_dashboard_screen.dart';
-import '../../finance/admin_finance_dashboard_screen.dart';
-import '../../teacher/teacher_dashboard_screen.dart';
-import '../../teacher/bimbel_dashboard_screen.dart';
-import '../../parent/parent_dashboard_screen.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/constants/app_settings.dart';
+import '../../../core/router/app_router.dart';
+import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,40 +14,78 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _authService = AuthService();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isObscure = true; // Status Mata (Tampil/Sembunyi Password)
+  bool _isLoading = false;
+  bool _isObscure = true; 
+  final _formKey = GlobalKey<FormState>();
 
-  void _handleLogin() {
-    final username = _usernameController.text.trim();
+  Future<void> _handleLogin() async {
+    final identifier = _usernameController.text.trim().toLowerCase();
     final password = _passwordController.text.trim();
 
-    if (username.isEmpty || password.isEmpty) {
-      _showError('Username dan Password tidak boleh kosong!');
+    if (identifier.isEmpty) {
+      _showError('Username tidak boleh kosong');
       return;
     }
 
-    // LIST AKUN PALSU (DUMMY)
-    if (username == 'admin' && password == 'admin123') {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SuperadminDashboardScreen()));
-    } else if (username == 'kepala' && password == 'sekolah123') {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HeadmasterDashboardScreen()));
-    } else if (username == 'kurikulum' && password == 'waka123') {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const WakakurDashboardScreen()));
-    } else if (username == 'operator' && password == 'data123') {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const OperatorDashboardScreen()));
-    } else if (username == 'keuangan' && password == 'uang123') {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminFinanceDashboardScreen()));
-    } else if (username == 'guru' && password == 'guru123') {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TeacherDashboardScreen(isWaliKelas: false)));
-    } else if (username == 'walikelas' && password == 'wali123') {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TeacherDashboardScreen(isWaliKelas: true)));
-    } else if (username == 'bimbel' && password == 'bimbel123') {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const BimbelDashboardScreen()));
-    } else if (username == 'ortu' && password == 'ortu123') {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ParentDashboardScreen()));
-    } else {
-      _showError('Username atau Password salah!');
+    setState(() => _isLoading = true);
+
+    // ── MODE DEMO — hanya aktif saat debug, TIDAK masuk production ──
+    // ignore: do_not_use_environment
+    const bool isRelease = bool.fromEnvironment('dart.vm.product');
+    if (!isRelease) {
+      final mockRoles = {
+        'superadmin@madrasah.id': AppRoutes.superadmin,
+        'kamad@madrasah.id': AppRoutes.kepala,
+        'wakakur@madrasah.id': AppRoutes.wakakur,
+        'operator@madrasah.id': AppRoutes.operator_,
+        'keuangan@madrasah.id': AppRoutes.keuangan,
+        'guru@madrasah.id': AppRoutes.guru,
+        'bimbel@madrasah.id': AppRoutes.bimbel,
+        'ortu@madrasah.id': AppRoutes.orangTua,
+      };
+      if (mockRoles.containsKey(identifier)) {
+        await Future.delayed(const Duration(milliseconds: 800));
+        if (!mounted) return;
+        context.go(mockRoles[identifier]!);
+        setState(() => _isLoading = false);
+        return;
+      }
+    }
+    // ─────────────────────────────────────────────────────────────
+
+    try {
+      final response = await _authService.signIn(identifier, password);
+      final user = response.user;
+      
+      if (user != null) {
+        final roleCode = await _authService.getUserRole(user.id);
+        if (!mounted) return;
+
+        switch (roleCode) {
+          case 'SA': context.go(AppRoutes.superadmin); break;
+          case 'KM': context.go(AppRoutes.kepala); break;
+          case 'WK': context.go(AppRoutes.wakakur); break;
+          case 'OP': context.go(AppRoutes.operator_); break;
+          case 'AK': context.go(AppRoutes.keuangan); break;
+          case 'GM':
+            context.go(AppRoutes.guru);
+            break;
+          case 'GB': context.go(AppRoutes.bimbel); break;
+          case 'OT': context.go(AppRoutes.orangTua); break;
+          default:
+            _showError('Role tidak dikenali atau akses ditolak');
+            await _authService.signOut();
+        }
+      }
+    } on AuthException catch (e) {
+      _showError(e.message);
+    } catch (e) {
+      _showError('Terjadi kesalahan: ${e.toString()}');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -66,162 +100,111 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // Responsive sizing helper
+  _ResponsiveSizes _getResponsiveSizes(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    
+    // Breakpoint definitions
+    bool isMobile = screenWidth < 600;
+    bool isTablet = screenWidth >= 600 && screenWidth < 1024;
+    bool isDesktop = screenWidth >= 1024;
+
+    return _ResponsiveSizes(
+      isMobile: isMobile,
+      isTablet: isTablet,
+      isDesktop: isDesktop,
+      cardMaxWidth: isMobile ? double.infinity : (isTablet ? 500 : 450),
+      cardMargin: EdgeInsets.symmetric(
+        horizontal: isMobile ? 16 : 24,
+        vertical: isMobile ? 16 : 40,
+      ),
+      cardPadding: EdgeInsets.all(isMobile ? 20 : 40),
+      logoSize: isMobile ? 80 : 100,
+      logoIconSize: isMobile ? 28 : 36,
+      logoTextSize: isMobile ? 9 : 10,
+      titleFontSize: isMobile ? 16 : 20,
+      subtitleFontSize: isMobile ? 12 : 14,
+      inputFontSize: isMobile ? 13 : 14,
+      buttonFontSize: isMobile ? 14 : 16,
+      buttonPadding: isMobile ? 14 : 18,
+      spacing: isMobile ? 12 : 16,
+      largeSpacing: isMobile ? 20 : 32,
+      extraLargeSpacing: isMobile ? 24 : 40,
+      borderRadius: isMobile ? 16 : 24,
+      inputBorderRadius: isMobile ? 10 : 12,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final sizes = _getResponsiveSizes(context);
+    final isMobile = sizes.isMobile;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FE),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(maxWidth: 450),
-            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-            padding: const EdgeInsets.all(40),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                )
-              ],
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 0 : 24,
+              vertical: isMobile ? 0 : 40,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // PLACEHOLDER LOGO SEKOLAH (Dapat dikonfigurasi Superadmin nanti)
-                Center(
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.blue.shade100, width: 2),
-                    ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: sizes.cardMaxWidth,
+                minHeight: MediaQuery.of(context).size.height - 
+                  (isMobile ? 0 : 80),
+              ),
+              child: IntrinsicHeight(
+                child: Container(
+                  width: double.infinity,
+                  margin: sizes.cardMargin,
+                  padding: sizes.cardPadding,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(sizes.borderRadius),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        blurRadius: isMobile ? 10 : 20,
+                        offset: Offset(0, isMobile ? 5 : 10),
+                      )
+                    ],
+                  ),
+                  child: Form(
+                    key: _formKey,
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Icon(Icons.image_outlined, size: 36, color: Colors.blue.shade300),
-                        const SizedBox(height: 4),
-                        Text('Logo\nSekolah', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: Colors.blue.shade400, fontWeight: FontWeight.bold)),
+                        // LOGO SEKOLAH
+                        _buildLogo(sizes),
+                        SizedBox(height: sizes.spacing),
+
+                        // TEKS SAMBUTAN
+                        _buildWelcomeText(sizes),
+                        SizedBox(height: sizes.extraLargeSpacing),
+
+                        // FORM INPUT
+                        _buildUsernameInput(sizes),
+                        SizedBox(height: sizes.spacing),
+                        _buildPasswordInput(sizes),
+                        SizedBox(height: sizes.largeSpacing),
+
+                        // TOMBOL MASUK
+                        _buildLoginButton(sizes),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                
-                // TEKS SAMBUTAN
-                const Text(
-                  'Selamat Datang di Informasi Akademik Sekolah',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2B3674),
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Silakan masuk menggunakan akun Anda',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-                ),
-                const SizedBox(height: 40),
-
-                // KOLOM USERNAME
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: TextField(
-                    controller: _usernameController,
-                    decoration: InputDecoration(
-                      hintText: 'Username',
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                      prefixIcon: Icon(Icons.person_outline, color: Colors.grey.shade400),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    ),
-                    // Deteksi tombol enter
-                    onSubmitted: (_) => _handleLogin(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // KOLOM PASSWORD (Dengan ikon mata)
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: TextField(
-                    controller: _passwordController,
-                    obscureText: _isObscure,
-                    decoration: InputDecoration(
-                      hintText: 'Password',
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                      prefixIcon: Icon(Icons.lock_outline, color: Colors.grey.shade400),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                          color: _isObscure ? Colors.grey.shade400 : Colors.blue.shade600,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _isObscure = !_isObscure; // Toggle status mata
-                          });
-                        },
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    ),
-                    onSubmitted: (_) => _handleLogin(),
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                // TOMBOL MASUK DENGAN DESAIN MODERN
-                ElevatedButton(
-                  onPressed: _handleLogin,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo.shade600,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Masuk', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-                
-                const SizedBox(height: 24),
-                // Petunjuk singkat untuk Anda saat uji coba
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
-                  child: Column(
-                    children: [
-                      Text('Akun Testing (Dummy):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange.shade800)),
-                      const SizedBox(height: 8),
-                      _dummyAccountText('Superadmin:', 'admin', 'admin123'),
-                      _dummyAccountText('Kepsek:', 'kepala', 'sekolah123'),
-                      _dummyAccountText('Wakakur:', 'kurikulum', 'waka123'),
-                      _dummyAccountText('Operator:', 'operator', 'data123'),
-                      _dummyAccountText('Keuangan:', 'keuangan', 'uang123'),
-                      _dummyAccountText('Guru:', 'guru', 'guru123'),
-                      _dummyAccountText('Wali Kelas:', 'walikelas', 'wali123'),
-                      _dummyAccountText('Guru Bimbel:', 'bimbel', 'bimbel123'),
-                      _dummyAccountText('Orang Tua:', 'ortu', 'ortu123'),
-                    ],
-                  ),
-                )
-              ],
+              ),
             ),
           ),
         ),
@@ -229,19 +212,216 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _dummyAccountText(String label, String username, String pass) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text('$label ', style: TextStyle(fontSize: 11, color: Colors.orange.shade800)),
-          Text(username, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
-          Text(' / ', style: TextStyle(fontSize: 11, color: Colors.orange.shade800)),
-          Text(pass, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
-        ],
+  Widget _buildLogo(_ResponsiveSizes sizes) {
+    return Center(
+      child: Container(
+        width: sizes.logoSize,
+        height: sizes.logoSize,
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.blue.shade100, width: 2),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.school_outlined,
+              size: sizes.logoIconSize,
+              color: Colors.blue.shade400,
+            ),
+            SizedBox(height: 2),
+            Text(
+              appConfig.schoolName,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: sizes.logoTextSize,
+                color: Colors.blue.shade400,
+                fontWeight: FontWeight.bold,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildWelcomeText(_ResponsiveSizes sizes) {
+    return Column(
+      children: [
+        Text(
+          'Selamat Datang di Informasi Akademik Sekolah',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: sizes.titleFontSize,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF2B3674),
+            height: 1.3,
+          ),
+        ),
+        SizedBox(height: sizes.spacing / 2),
+        Text(
+          'Silakan masuk menggunakan akun Anda',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: sizes.subtitleFontSize,
+            color: Colors.grey.shade500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUsernameInput(_ResponsiveSizes sizes) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(sizes.inputBorderRadius),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: TextField(
+        controller: _usernameController,
+        textInputAction: TextInputAction.next,
+        style: TextStyle(fontSize: sizes.inputFontSize),
+        decoration: InputDecoration(
+          hintText: 'Username',
+          hintStyle: TextStyle(
+            color: Colors.grey.shade400,
+            fontSize: sizes.inputFontSize,
+          ),
+          prefixIcon: Icon(Icons.person_outline, color: Colors.grey.shade400),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: sizes.isMobile ? 12 : 16,
+            vertical: sizes.isMobile ? 12 : 16,
+          ),
+        ),
+        onSubmitted: (_) => _handleLogin(),
+      ),
+    );
+  }
+
+  Widget _buildPasswordInput(_ResponsiveSizes sizes) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(sizes.inputBorderRadius),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: TextField(
+        controller: _passwordController,
+        obscureText: _isObscure,
+        textInputAction: TextInputAction.done,
+        style: TextStyle(fontSize: sizes.inputFontSize),
+        decoration: InputDecoration(
+          hintText: 'Password',
+          hintStyle: TextStyle(
+            color: Colors.grey.shade400,
+            fontSize: sizes.inputFontSize,
+          ),
+          prefixIcon: Icon(Icons.lock_outline, color: Colors.grey.shade400),
+          suffixIcon: IconButton(
+            icon: Icon(
+              _isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+              color: _isObscure ? Colors.grey.shade400 : Colors.blue.shade600,
+            ),
+            onPressed: () {
+              setState(() {
+                _isObscure = !_isObscure;
+              });
+            },
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: 40,
+              minHeight: 40,
+            ),
+          ),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: sizes.isMobile ? 12 : 16,
+            vertical: sizes.isMobile ? 12 : 16,
+          ),
+        ),
+        onSubmitted: (_) => _handleLogin(),
+      ),
+    );
+  }
+
+  Widget _buildLoginButton(_ResponsiveSizes sizes) {
+    return ElevatedButton(
+      onPressed: _isLoading ? null : _handleLogin,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.indigo.shade600,
+        foregroundColor: Colors.white,
+        padding: EdgeInsets.symmetric(vertical: sizes.buttonPadding),
+        elevation: 2,
+        shadowColor: Colors.indigo.withOpacity(0.3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(sizes.inputBorderRadius),
+        ),
+      ),
+      child: _isLoading 
+        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.login_rounded, size: sizes.buttonFontSize),
+              const SizedBox(width: 8),
+              Text(
+                'Masuk',
+                style: TextStyle(
+                  fontSize: sizes.buttonFontSize,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
     );
   }
 }
 
+// Helper class untuk responsive sizing
+class _ResponsiveSizes {
+  final bool isMobile;
+  final bool isTablet;
+  final bool isDesktop;
+  final double cardMaxWidth;
+  final EdgeInsets cardMargin;
+  final EdgeInsets cardPadding;
+  final double logoSize;
+  final double logoIconSize;
+  final double logoTextSize;
+  final double titleFontSize;
+  final double subtitleFontSize;
+  final double inputFontSize;
+  final double buttonFontSize;
+  final double buttonPadding;
+  final double spacing;
+  final double largeSpacing;
+  final double extraLargeSpacing;
+  final double borderRadius;
+  final double inputBorderRadius;
+
+  _ResponsiveSizes({
+    required this.isMobile,
+    required this.isTablet,
+    required this.isDesktop,
+    required this.cardMaxWidth,
+    required this.cardMargin,
+    required this.cardPadding,
+    required this.logoSize,
+    required this.logoIconSize,
+    required this.logoTextSize,
+    required this.titleFontSize,
+    required this.subtitleFontSize,
+    required this.inputFontSize,
+    required this.buttonFontSize,
+    required this.buttonPadding,
+    required this.spacing,
+    required this.largeSpacing,
+    required this.extraLargeSpacing,
+    required this.borderRadius,
+    required this.inputBorderRadius,
+  });
+}

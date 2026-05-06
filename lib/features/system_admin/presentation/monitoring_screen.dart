@@ -6,15 +6,19 @@ class MonitoringScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Monitoring Sistem'),
-        backgroundColor: Colors.red.shade800,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
+      backgroundColor: Colors.transparent,
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              color: Colors.red.shade800,
+              child: const Text('Monitoring Sistem', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16.0),
           children: [
             _buildSectionHeader('Log Aktivitas & Audit Trail', Icons.history),
             const SizedBox(height: 12),
@@ -57,6 +61,9 @@ class MonitoringScreen extends StatelessWidget {
               '3 Hari yang lalu',
               Icons.warning_amber_rounded,
               Colors.orange,
+            ),
+          ],
+        ),
             ),
           ],
         ),

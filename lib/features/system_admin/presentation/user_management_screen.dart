@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../core/network/supabase_service.dart';
+import '../../../shared/models/app_user.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class UserManagementScreen extends StatefulWidget {
   const UserManagementScreen({super.key});
@@ -8,31 +11,90 @@ class UserManagementScreen extends StatefulWidget {
 }
 
 class _UserManagementScreenState extends State<UserManagementScreen> {
-  // Dummy state untuk simulasi tab/filter
+  // State untuk data ril
+  List<AppUser> _allUsers = [];
+  List<AppUser> _filteredUsers = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
   String _selectedRoleFilter = 'Semua Role';
-  final List<String> _roles = ['Semua Role', 'GURU_MAPEL', 'SISWA', 'ORANG_TUA', 'KEPALA_MADRASAH', 'OPERATOR_DATA'];
+  final List<String> _roles = ['Semua Role', 'SA', 'KM', 'WK', 'OP', 'AK', 'GM', 'GB', 'OT'];
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUsers();
+  }
+
+  Future<void> _fetchUsers() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await SupabaseService().client
+          .from('users')
+          .select('*, user_roles(is_primary, roles(*))')
+          .order('created_at', ascending: false);
+
+      final List<dynamic> data = response;
+      _allUsers = data.map((json) => AppUser.fromJson(json)).toList();
+      _applyFilter();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Gagal memuat data: $e';
+          _isLoading = false;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _applyFilter() {
+    setState(() {
+      _filteredUsers = _allUsers.where((u) {
+        final matchesRole = _selectedRoleFilter == 'Semua Role' || u.roleCode == _selectedRoleFilter;
+        final matchesSearch = _searchQuery.isEmpty || 
+                              u.username.toLowerCase().contains(_searchQuery.toLowerCase()) || 
+                              u.email.toLowerCase().contains(_searchQuery.toLowerCase());
+        return matchesRole && matchesSearch;
+      }).toList();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manajemen User'),
-        backgroundColor: Colors.green.shade800, // Warna indikator dari dashboard utama
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_add_alt_1_outlined),
-            tooltip: 'Tambah User Baru',
-            onPressed: () {
-              _showAddUserModal(context);
-            },
-          ),
-        ],
-      ),
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Column(
           children: [
+            // Custom Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              color: Colors.green.shade800,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Manajemen User', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.person_add_alt_1_outlined, color: Colors.white),
+                    tooltip: 'Tambah User Baru',
+                    onPressed: () {
+                      _showAddUserModal(context);
+                    },
+                  ),
+                ],
+              ),
+            ),
             // Search & Filter Section
             Container(
               color: Colors.green.shade50,
@@ -41,6 +103,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 children: [
                   Expanded(
                     child: TextField(
+                      onChanged: (value) {
+                        _searchQuery = value;
+                        _applyFilter();
+                      },
                       decoration: InputDecoration(
                         hintText: 'Cari nama, email, atau ID...',
                         prefixIcon: const Icon(Icons.search, size: 20),
@@ -62,7 +128,20 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             
             // User List Section
             Expanded(
-              child: _buildUserList(),
+              child: _isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                  ? Center(child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(_errorMessage!, textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        ElevatedButton(onPressed: _fetchUsers, child: const Text('Coba Lagi'))
+                      ],
+                    ))
+                  : _filteredUsers.isEmpty
+                    ? const Center(child: Text('Tidak ada data user found.'))
+                    : _buildUserList(),
             ),
           ],
         ),
@@ -85,15 +164,14 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           style: const TextStyle(fontSize: 14, color: Colors.black87),
           onChanged: (String? newValue) {
             if (newValue != null) {
-              setState(() {
-                _selectedRoleFilter = newValue;
-              });
+              _selectedRoleFilter = newValue;
+              _applyFilter();
             }
           },
           items: _roles.map<DropdownMenuItem<String>>((String value) {
             return DropdownMenuItem<String>(
               value: value,
-              child: Text(value),
+              child: Text(_getFullRoleName(value)),
             );
           }).toList(),
         ),
@@ -101,16 +179,30 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
   }
 
+  String _getFullRoleName(String code) {
+    if (code == 'Semua Role') return code;
+    const roleNames = {
+      'SA': 'Super Admin',
+      'KM': 'Kepala Madrasah',
+      'WK': 'Wakil Kepala',
+      'OP': 'Operator',
+      'AK': 'Admin Keuangan',
+      'GM': 'Guru Mapel',
+      'GB': 'Guru BK',
+      'OT': 'Orang Tua',
+    };
+    return roleNames[code] ?? code;
+  }
+
   Widget _buildUserList() {
     return ListView.separated(
       padding: const EdgeInsets.all(16),
-      itemCount: 10,
+      itemCount: _filteredUsers.length,
       separatorBuilder: (context, index) => const Divider(height: 16),
       itemBuilder: (context, index) {
-        // Dummy data
-        final isActive = index % 3 != 0; // Simulasi beberapa user nonaktif
-        final roles = ['GURU_MAPEL', 'SISWA', 'ORANG_TUA', 'OPERATOR_DATA'];
-        final role = roles[index % roles.length];
+        final user = _filteredUsers[index];
+        final isActive = user.isActive;
+        final role = user.roleName ?? 'Tanpa Role';
         
         return Card(
           elevation: 0,
@@ -137,7 +229,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'User Name $index',
+                            user.username,
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -148,7 +240,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'user$index@madrasah.sch.id',
+                        user.email,
                         style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                       ),
                       const SizedBox(height: 8),
@@ -175,7 +267,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.grey),
                   onSelected: (action) {
-                    _handleUserAction(context, action);
+                    _handleUserAction(context, action, user);
                   },
                   itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
                     const PopupMenuItem<String>(
@@ -273,9 +365,18 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               const SizedBox(height: 16),
               const TextField(
                 decoration: InputDecoration(
-                  labelText: 'Email',
+                  labelText: 'Username',
                   border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email_outlined),
+                  prefixIcon: Icon(Icons.account_circle_outlined),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const TextField(
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock_outline),
                 ),
               ),
               const SizedBox(height: 16),
@@ -286,7 +387,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   prefixIcon: Icon(Icons.shield_outlined),
                 ),
                 items: _roles.where((r) => r != 'Semua Role').map((role) {
-                  return DropdownMenuItem(value: role, child: Text(role));
+                  return DropdownMenuItem(value: role, child: Text(_getFullRoleName(role)));
                 }).toList(),
                 onChanged: (val) {},
               ),
@@ -315,17 +416,34 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
   }
 
-  void _handleUserAction(BuildContext context, String action) {
+  void _handleUserAction(BuildContext context, String action, AppUser user) {
     if (action == 'reset_pass') {
-      _showResetPasswordConfirm(context);
+      _showResetPasswordConfirm(context, user);
     } else if (action == 'edit_role') {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buka form Atur Role (Mock)')));
     } else if (action == 'deactivate' || action == 'activate') {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Status user diubah (Mock)')));
+      _toggleUserStatus(user);
     }
   }
 
-  void _showResetPasswordConfirm(BuildContext context) {
+  Future<void> _toggleUserStatus(AppUser user) async {
+    try {
+      await SupabaseService().client.from('users').update({
+        'is_active': !user.isActive
+      }).eq('id', user.id);
+      
+      _fetchUsers(); // Refresh
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status ${user.username} diperbarui.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal ubah status: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  void _showResetPasswordConfirm(BuildContext context, AppUser user) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

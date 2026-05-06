@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/router/app_router.dart';
+import '../../core/network/supabase_service.dart';
 import 'operator_master_siswa.dart';
 import 'operator_master_guru.dart';
 import 'operator_master_kelas.dart';
 import 'operator_master_mapel.dart';
+import 'operator_master_tahun_ajaran.dart';
+import 'operator_master_jurusan.dart';
+import 'operator_master_ekskul.dart';
+import 'operator_master_bimbel.dart';
+import 'operator_peserta_bimbel.dart';
 import '../auth/presentation/login_screen.dart';
 import '../../shared/widgets/profile_settings_screen.dart';
 
@@ -15,14 +24,84 @@ class OperatorDashboardScreen extends StatefulWidget {
 
 class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
   int _selectedIndex = 0;
+  bool _isLoading = true;
+  
+  // Real Statistics
+  int _totalSiswa = 0;
+  int _totalGuru = 0;
+  List<Map<String, dynamic>> _recentActivities = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRecentActivities();
+    _fetchStats();
+  }
+
+  Future<void> _fetchStats() async {
+    setState(() => _isLoading = true);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      
+      if (user != null) {
+        // ── JALUR RIIL (SUPABASE) ────────────────────────
+        final client = SupabaseService().client;
+        final siswaCount = await client.from('siswa').select('id');
+        final guruCount = await client.from('guru').select('id');
+        if (mounted) {
+          setState(() {
+            _totalSiswa = (siswaCount as List).length;
+            _totalGuru = (guruCount as List).length;
+            _isLoading = false;
+          });
+        }
+      } else {
+        // ── JALUR DEMO (SIMULASI DATA) ───────────────────
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (mounted) {
+          setState(() {
+            _totalSiswa = 1250;
+            _totalGuru = 84;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   final List<Map<String, dynamic>> _menuItems = [
     {'title': 'Dashboard', 'icon': Icons.dashboard_outlined},
-    {'title': 'Master Siswa', 'icon': Icons.face_outlined},
-    {'title': 'Master Guru & Pegawai', 'icon': Icons.badge_outlined},
-    {'title': 'Master Kelas', 'icon': Icons.class_outlined},
-    {'title': 'Master Mata Pelajaran', 'icon': Icons.library_books_outlined},
+    {'title': 'Master Tahun Ajaran', 'icon': Icons.calendar_today_outlined},
+    {'title': 'Data Jurusan/Program', 'icon': Icons.account_tree_outlined},
+    {'title': 'Data Pegawai (Guru & TU)', 'icon': Icons.badge_outlined},
+    {'title': 'Data Siswa & Wali', 'icon': Icons.face_outlined},
+    {'title': 'Data Kelas', 'icon': Icons.class_outlined},
+    {'title': 'Data Mata Pelajaran', 'icon': Icons.library_books_outlined},
+    {'title': 'Master Ekstrakurikuler', 'icon': Icons.sports_basketball_outlined},
+    {'title': 'Master Program Bimbel', 'icon': Icons.auto_stories_outlined},
+    {'title': 'Peserta & Akun Bimbel', 'icon': Icons.how_to_reg_outlined},
   ];
+
+  Future<void> _fetchRecentActivities() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final res = await supabase
+          .from('audit_log')
+          .select('table_name, action, description, performed_at')
+          .order('performed_at', ascending: false)
+          .limit(5);
+      if (mounted) setState(() => _recentActivities = List<Map<String, dynamic>>.from(res as List));
+    } catch (_) {}
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '\${diff.inMinutes} menit lalu';
+    if (diff.inHours < 24) return '\${diff.inHours} jam lalu';
+    return '\${diff.inDays} hari lalu';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -162,45 +241,10 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
           if (isDesktop)
             IconButton(
               icon: const Icon(Icons.menu_open, color: Colors.grey),
-              onPressed: () {},
+              onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           const SizedBox(width: 16),
-          Container(
-            width: 250,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Cari NISN, NUPTK, Nama...',
-                        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                        border: InputBorder.none,
-                      ),
-                    ),
-                  ),
-                ),
-                Container(
-                  height: double.infinity,
-                  width: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.brown.shade500,
-                    borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(8),
-                      bottomRight: Radius.circular(8),
-                    ),
-                  ),
-                  child: const Icon(Icons.search, color: Colors.white, size: 20),
-                ),
-              ],
-            ),
-          ),
+
           const Spacer(),
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -217,7 +261,7 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
               if (value == 'settings') {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()));
               } else if (value == 'logout') {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                context.go(AppRoutes.login);
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -257,13 +301,23 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
       case 0:
         return _buildMainContent();
       case 1:
-        return const OperatorMasterSiswa();
+        return const OperatorMasterTahunAjaran();
       case 2:
-        return const OperatorMasterGuru();
+        return const OperatorMasterJurusan();
       case 3:
-        return const OperatorMasterKelas();
+        return const OperatorMasterGuru();
       case 4:
+        return const OperatorMasterSiswa();
+      case 5:
+        return const OperatorMasterKelas();
+      case 6:
         return const OperatorMasterMapel();
+      case 7:
+        return const OperatorMasterEkskul();
+      case 8:
+        return const OperatorMasterBimbel();
+      case 9:
+        return const OperatorPesertaBimbel();
       default:
         return _buildMainContent();
     }
@@ -287,7 +341,7 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
               ),
               const Spacer(),
               ElevatedButton.icon(
-                onPressed: () {},
+                onPressed: null,
                 icon: const Icon(Icons.sync),
                 label: const Text('Sinkronisasi Emis / Dapodik'),
                 style: ElevatedButton.styleFrom(
@@ -312,8 +366,8 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _buildStatCard(Colors.blueAccent, '1,452', 'Total Siswa Terdaftar', Icons.groups),
-                  _buildStatCard(Colors.green, '124', 'Total Guru & Staff', Icons.badge),
+                  _buildStatCard(Colors.blueAccent, _totalSiswa.toString(), 'Total Siswa Terdaftar', Icons.groups),
+                  _buildStatCard(Colors.green, _totalGuru.toString(), 'Total Guru & Staff', Icons.badge),
                   _buildStatCard(Colors.orangeAccent, '36', 'Total Rombongan Belajar', Icons.meeting_room),
                   _buildStatCard(Colors.purpleAccent, '42', 'Total Mata Pelajaran', Icons.auto_stories),
                 ],
@@ -399,7 +453,7 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Aktivitas Perubahan Data Terbaru', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-              TextButton(onPressed: () {}, child: const Text('Lihat Log Lengkap')),
+              TextButton(onPressed: null, child: const Text('Lihat Log Lengkap')),
             ],
           ),
           const SizedBox(height: 16),
@@ -414,8 +468,29 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
                 DataColumn(label: Text('Waktu', style: TextStyle(fontWeight: FontWeight.bold))),
               ],
               rows: [
-                _buildDataRow('Siswa', 'Tambah Baru', 'Ahmad Rizal (NISN: 001293)', '10 Menit lalu', Colors.green),
-                _buildDataRow('Guru', 'Update', 'Budi Santoso (NUPTK)', '1 Jam lalu', Colors.blue),
+                if (_recentActivities.isEmpty) ...[  
+                  DataRow(cells: [
+                    DataCell(Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text('Belum ada aktivitas', style: TextStyle(color: Colors.grey.shade500)),
+                    )),
+                    const DataCell(Text('')),
+                    const DataCell(Text('')),
+                    const DataCell(Text('')),
+                  ]),
+                ] else ..._recentActivities.map((a) {
+                  final color = a['action'] == 'INSERT' ? Colors.green
+                      : a['action'] == 'DELETE' ? Colors.red
+                      : Colors.blue;
+                  final time = _timeAgo(DateTime.tryParse(a['performed_at'] ?? '') ?? DateTime.now());
+                  return _buildDataRow(
+                    a['table_name'] ?? '-',
+                    a['action'] ?? '-',
+                    a['description'] ?? '-',
+                    time,
+                    color,
+                  );
+                }).toList(),
                 _buildDataRow('Kelas', 'Penghapusan', 'Menghapus Kelas X IPS 4', '3 Jam lalu', Colors.red),
                 _buildDataRow('Siswa', 'Mutasi Keluar', 'Diana Fitri (Pindah)', 'Kemarin', Colors.orange),
               ],
@@ -487,7 +562,7 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
             child: Text(message, style: TextStyle(fontSize: 13, color: Colors.grey.shade800)),
           ),
           TextButton(
-            onPressed: () {},
+            onPressed: null,
             style: TextButton.styleFrom(minimumSize: Size.zero, padding: EdgeInsets.zero),
             child: Text('Perbaiki', style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold)),
           )

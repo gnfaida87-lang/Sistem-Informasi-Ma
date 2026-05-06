@@ -41,6 +41,7 @@ Dokumen ini mendefinisikan:
 | Master Guru     | D-GUR | OP                         |
 | Kelas & Rombel  | D-KLS | OP                         |
 | Mata Pelajaran  | D-MAP | OP                         |
+| Periode Akdmk   | D-PRD | OP (Input) → WK (Validasi) |
 | Jadwal Akademik | D-JDW | WK                         |
 | Absensi         | D-ABS | GM                         |
 | Nilai           | D-NIL | GM (Input) → WK (Validasi) |

@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
-import '../auth/presentation/login_screen.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/router/app_router.dart';
+import '../../core/mixins/safe_async_mixin.dart';
+import 'services/teacher_service.dart';
+import 'services/bimbel_service.dart';
+import 'models/teacher_models.dart';
 import 'bimbel_submenus_screen.dart';
 
 class BimbelDashboardScreen extends StatefulWidget {
@@ -9,8 +15,35 @@ class BimbelDashboardScreen extends StatefulWidget {
   State<BimbelDashboardScreen> createState() => _BimbelDashboardScreenState();
 }
 
-class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
+class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with SafeAsync {
   int _currentIndex = 0;
+  final _teacherService = TeacherService();
+  final _bimbelService = BimbelService();
+  Map<String, dynamic>? _profile;
+  List<BimbelSession> _sessions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initDashboard();
+  }
+
+  Future<void> _initDashboard() async {
+    await safeCall(
+      context: context,
+      action: () async {
+        final userId = Supabase.instance.client.auth.currentUser?.id;
+        if (userId != null) {
+          final profileData = await _teacherService.getTeacherProfileByUserId(userId);
+          if (profileData != null) {
+            setState(() => _profile = profileData);
+            final sessionData = await _bimbelService.fetchTutorSessions(profileData['id']);
+            setState(() => _sessions = sessionData);
+          }
+        }
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +123,7 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Selamat Datang,', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                    const Text('Dr. Ilham Ramadhani', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
+                    Text(_profile?['nama'] ?? 'Memuat...', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -125,9 +158,9 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
                     children: [
                       const Text('Jadwal Bimbel Hari Ini', style: TextStyle(color: Colors.white70, fontSize: 12)),
                       const SizedBox(height: 8),
-                      const Text('2 Sesi Kelas', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text('${_sessions.length} Sesi Bimbel', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      Text('Persiapan UTBK & Olimpiade', style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12)),
+                      Text('Manajemen bimbingan belajar aktif', style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12)),
                     ],
                   ),
                 ),
@@ -142,22 +175,62 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
           const SizedBox(height: 32),
 
           // GRID MENU UTAMA BIMBEL
-          const Text('Modul Bimbingan Belajar', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-          const SizedBox(height: 16),
+          const Text('Modul Bimbingan Belajar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
+          const SizedBox(height: 20),
           GridView.count(
             crossAxisCount: 3,
-            mainAxisSpacing: 16,
+            mainAxisSpacing: 20,
             crossAxisSpacing: 16,
+            childAspectRatio: 0.8, // Memberikan ruang vertikal lebih
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             children: [
+              _buildMenuIcon(context, 'Jadwal\nBimbel', Icons.calendar_today, Colors.blue, _showSubmenuJadwal),
               _buildMenuIcon(context, 'Absensi\nBimbel', Icons.how_to_reg, Colors.green, _showSubmenuAbsensi),
-              _buildMenuIcon(context, 'Nilai & Evaluasi', Icons.score, Colors.orange, _showSubmenuNilai),
+              _buildMenuIcon(context, 'Nilai &\nEvaluasi', Icons.score, Colors.orange, _showSubmenuNilai),
               _buildMenuIcon(context, 'Materi &\nLatihan', Icons.menu_book, Colors.purple, _showSubmenuMateri),
+              _buildMenuIcon(context, 'Al-Qur\'an\nDigital', Icons.menu_book_outlined, Colors.teal, () {
+                context.push(AppRoutes.quran);
+              }),
+              _buildMenuIcon(context, 'AI Sahabat\nGuru', Icons.smart_toy, Colors.indigo, () {
+                context.push(AppRoutes.aiGuru);
+              }),
+              _buildMenuIcon(context, 'Pengumuman', Icons.campaign, Colors.red, _showSubmenuPengumuman),
             ],
           ),
+          const SizedBox(height: 32),
+
         ],
       ),
+    );
+  }
+
+  // BOTTOM SHEET SUB-MENU JADWAL
+  void _showSubmenuJadwal() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Jadwal Bimbel', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)), child: Icon(Icons.today, color: Colors.blue.shade700)),
+                title: const Text('Jadwal Hari Ini'),
+                onTap: () { 
+                  Navigator.pop(context); 
+                  setState(() => _currentIndex = 1); // Pindah ke tab jadwal
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -180,7 +253,17 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
                 subtitle: const Text('Kehadiran Siswa Bimbel Hari Ini'),
                 onTap: () { 
                   Navigator.pop(context); 
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const BimbelAbsensiScreen(isRiwayat: false)));
+                  if (_sessions.isNotEmpty) {
+                    _showSessionPicker(context, (session) {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => BimbelAbsensiScreen(
+                        isRiwayat: false,
+                        sessionId: session.id,
+                        programId: session.programId ?? '',
+                      )));
+                    });
+                  } else {
+                    _showToast('Tidak ada sesi bimbel aktif');
+                  }
                 },
               ),
               const Divider(),
@@ -190,7 +273,17 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
                 subtitle: const Text('Cek histori absen peserta bimbel'),
                 onTap: () { 
                   Navigator.pop(context); 
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const BimbelAbsensiScreen(isRiwayat: true)));
+                  if (_sessions.isNotEmpty) {
+                    _showSessionPicker(context, (session) {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => BimbelAbsensiScreen(
+                        isRiwayat: true,
+                        sessionId: session.id,
+                        programId: session.programId ?? '',
+                      )));
+                    });
+                  } else {
+                    _showToast('Tidak ada riwayat sesi');
+                  }
                 },
               ),
             ],
@@ -218,7 +311,15 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
                 title: const Text('Input Nilai Latihan / Try Out'),
                 onTap: () { 
                   Navigator.pop(context); 
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const BimbelNilaiScreen(isRekap: false)));
+                  if (_sessions.isNotEmpty) {
+                    _showSessionPicker(context, (session) {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => BimbelNilaiScreen(
+                        isRekap: false,
+                        sessionId: session.id,
+                        programId: session.programId ?? '',
+                      )));
+                    });
+                  }
                 },
               ),
               const Divider(),
@@ -227,7 +328,15 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
                 title: const Text('Rekap Nilai Siswa'),
                 onTap: () { 
                   Navigator.pop(context); 
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const BimbelNilaiScreen(isRekap: true)));
+                   if (_sessions.isNotEmpty) {
+                    _showSessionPicker(context, (session) {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => BimbelNilaiScreen(
+                        isRekap: true,
+                        sessionId: session.id,
+                        programId: session.programId ?? '',
+                      )));
+                    });
+                  }
                 },
               ),
             ],
@@ -314,23 +423,76 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
   }
 
 
+  void _showSubmenuPengumuman() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Pengumuman Bimbel', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Icon(Icons.campaign, color: Colors.red.shade700),
+                title: const Text('Lihat Pengumuman'),
+                onTap: () { Navigator.pop(context); context.push(AppRoutes.announcementParent); },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+
   Widget _buildMenuIcon(BuildContext context, String title, IconData icon, MaterialColor color, VoidCallback onTap) {
+    // Ukuran responsif berdasarkan lebar layar
+    double screenWidth = MediaQuery.of(context).size.width;
+    double iconBoxSize = screenWidth * 0.16; // Kotak ikon lebih besar
+    if (iconBoxSize > 70) iconBoxSize = 70;
+    if (iconBoxSize < 50) iconBoxSize = 50;
+
+    double iconSize = iconBoxSize * 0.5; // Ukuran ikon di dalam kotak
+
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
+            width: iconBoxSize,
+            height: iconBoxSize,
             decoration: BoxDecoration(
               color: color.shade50,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ],
             ),
-            child: Icon(icon, color: color.shade700, size: 28),
+            child: Icon(icon, color: color.shade700, size: iconSize),
           ),
-          const SizedBox(height: 8),
-          Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87)),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: screenWidth < 360 ? 10 : 11,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF2B3674),
+              height: 1.1,
+            ),
+          ),
         ],
       ),
     );
@@ -347,8 +509,16 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
         children: [
           const Text('Jadwal Bimbel Anda', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
           const SizedBox(height: 24),
-          _buildTimelineItem('15:00 - 16:30', 'Olimpiade Fisika', 'Kelompok Prestasi', 'Laboratorium Fisika', true),
-          _buildTimelineItem('16:45 - 18:15', 'Persiapan UTBK Mtk', 'Kelas Intensif XII', 'Ruang 04', false),
+          if (_sessions.isEmpty)
+             const Center(child: Text('Tidak ada sesi bimbel terdaftar', style: TextStyle(color: Colors.grey)))
+          else
+            ..._sessions.map((s) => _buildTimelineItem(
+              '${s.sessionDate.hour.toString().padLeft(2, '0')}:${s.sessionDate.minute.toString().padLeft(2, '0')}',
+              s.topic,
+              s.programName ?? 'Bimbel',
+              '${s.durationMinutes} Menit',
+              DateTime.now().isAfter(s.sessionDate) && DateTime.now().isBefore(s.sessionDate.add(Duration(minutes: s.durationMinutes))),
+            )),
         ],
       ),
     );
@@ -365,12 +535,15 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
       ),
       child: Row(
         children: [
-          Column(
-            children: [
-              Text(time.split(' - ')[0], style: TextStyle(fontWeight: FontWeight.bold, color: isNow ? Colors.deepPurple.shade700 : Colors.black87)),
-              const SizedBox(height: 4),
-              Text(time.split(' - ')[1], style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-            ],
+          SizedBox(
+            width: 50,
+            child: Column(
+              children: [
+                Text(time, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isNow ? Colors.deepPurple.shade700 : Colors.black87)),
+                const SizedBox(height: 4),
+                Text('Sesi', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+              ],
+            ),
           ),
           Container(height: 40, width: 2, color: isNow ? Colors.deepPurple : Colors.grey.shade200, margin: const EdgeInsets.symmetric(horizontal: 16)),
           Expanded(
@@ -431,8 +604,8 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          const Text('Dr. Ilham Ramadhani', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          Text('Tutor Eksternal (LBB)', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+          Text(_profile?['nama'] ?? 'Memuat...', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(_profile?['nip'] ?? 'NIP tidak tersedia', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
           const SizedBox(height: 32),
 
           // FORM BIODATA
@@ -455,7 +628,7 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
             width: double.infinity,
             child: OutlinedButton(
               onPressed: () {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                context.go(AppRoutes.login);
               },
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
               child: const Text('Keluar Aplikasi (Logout)'),
@@ -485,6 +658,43 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> {
           )
         ],
       ),
+    );
+  }
+
+  void _showSessionPicker(BuildContext context, Function(BimbelSession) onSelected) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Pilih Sesi Bimbel', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _sessions.length,
+                  itemBuilder: (context, index) {
+                    final s = _sessions[index];
+                    return ListTile(
+                      leading: const Icon(Icons.class_, color: Colors.deepPurple),
+                      title: Text(s.programName ?? 'Bimbel Tanpa Nama'),
+                      subtitle: Text('${s.topic} - ${s.sessionDate.toString().split(' ')[0]}'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        onSelected(s);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

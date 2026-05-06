@@ -135,6 +135,31 @@ USERS 1───1 ORANG_TUA
 
 ORANG_TUA 1───N ORANG_TUA_SISWA N───1 SISWA
 
+8. ACADEMIC MASTER DATA
+8.1 JURUSAN (Departments)
+id (uuid, PK)
+kode (unique)
+nama
+
+8.2 TAHUN_AJARAN (Academic Years)
+id (uuid, PK)
+tahun (unique, e.g. '2025/2026')
+is_active
+
+8.3 SEMESTER
+id (uuid, PK)
+tahun_ajaran_id (FK → TAHUN_AJARAN.id)
+nama ('Ganjil'/'Genap')
+is_active
+kkm_default
+is_validated
+validated_by (FK → USERS.id)
+
+9. RELASI AKADEMIK
+TAHUN_AJARAN 1───N SEMESTER
+SEMESTER 1───N JADWAL (D-JDW)
+JURUSAN 1───N KELAS
+
 5. LOGIN FLOW (BERDASARKAN ERD)
 Login → auth.users
         ↓

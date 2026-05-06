@@ -13,15 +13,19 @@ class _BackupMaintenanceScreenState extends State<BackupMaintenanceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Backup & Maintenance'),
-        backgroundColor: Colors.teal.shade800,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
+      backgroundColor: Colors.transparent,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              color: Colors.teal.shade800,
+              child: const Text('Backup & Maintenance', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -115,6 +119,9 @@ class _BackupMaintenanceScreenState extends State<BackupMaintenanceScreen> {
               ),
             ],
           ),
+        ),
+            ),
+          ],
         ),
       ),
     );

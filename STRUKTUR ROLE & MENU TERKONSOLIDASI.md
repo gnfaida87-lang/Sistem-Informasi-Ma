@@ -99,24 +99,36 @@ Batasan:
 4. OPERATOR DATA
 Fokus: Satu Pintu Master Data
 Menu:
-1. Data Siswa
-•	Tambah Siswa
+1. Master Tahun Ajaran
+•	Tambah Tahun Ajaran
+•	Set Tahun Ajaran Aktif
+•	Manajemen Semester
+2. Data Jurusan/Program
+•	Tambah Jurusan
+•	Edit Jurusan
+3. Data Pegawai (Guru & Staff TU)
+•	Tambah Pegawai
+•	Edit Pegawai
+•	Penugasan Mengajar (Guru)
+4. Data Siswa & Wali
+•	Tambah Siswa & Wali
 •	Edit Siswa
-•	Mutasi
-•	Nonaktifkan
-2. Data Guru
-•	Tambah Guru
-•	Edit Guru
-•	Penugasan Mengajar
-3. Data Kelas
+•	Mutasi / Nonaktifkan
+•	Import/Export Data
+•	Kenaikan Kelas & Kelulusan
+5. Data Kelas
 •	Tambah Kelas
 •	Wali Kelas
 •	Mapping Jurusan
-4. Data Mata Pelajaran
+6. Data Mata Pelajaran
 •	Tambah Mapel
 •	Edit Mapel
 •	Kelompok Mapel
-5. Master Bimbel
+7. Master Ekstrakurikuler
+•	Data Ekstrakurikuler
+•	Guru Pembina
+•	Peserta Ekskul
+8. Master Bimbel
 •	Data Guru Bimbel
 •	Program Bimbel
 •	Daftar Peserta
@@ -134,7 +146,7 @@ Menu:
 •	SPP
 •	Ujian
 •	Daftar Ulang
-•	Lainnya
+•	Tambahkan Jenis Pembayaran
 2. Tagihan
 •	Generate Tagihan
 •	Tagihan per Siswa

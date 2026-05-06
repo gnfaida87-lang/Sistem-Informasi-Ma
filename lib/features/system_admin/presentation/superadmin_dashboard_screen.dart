@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/router/app_router.dart';
 import 'system_dashboard_screen.dart';
 import 'user_management_screen.dart';
 import 'role_access_screen.dart';
 import 'monitoring_screen.dart';
 import 'backup_screen.dart';
 import 'integration_screen.dart';
+import 'app_settings_screen.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../../../shared/widgets/profile_settings_screen.dart';
+import '../../../core/constants/app_settings.dart';
 
 class SuperadminDashboardScreen extends StatefulWidget {
   const SuperadminDashboardScreen({super.key});
@@ -26,6 +30,7 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
     const MonitoringScreen(),
     const BackupMaintenanceScreen(),
     const IntegrationScreen(),
+    const AppSettingsScreen(),
   ];
 
   final List<Map<String, dynamic>> _menuItems = [
@@ -35,6 +40,7 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
     {'title': 'Monitoring', 'icon': Icons.auto_graph_outlined},
     {'title': 'Backup Data', 'icon': Icons.cloud_outlined},
     {'title': 'Integrasi AI', 'icon': Icons.memory_outlined},
+    {'title': 'Pengaturan', 'icon': Icons.settings_outlined},
   ];
 
   @override
@@ -99,9 +105,9 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
                   child: const Icon(Icons.school, color: Colors.white, size: 20),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'SI Madrasah',
-                  style: TextStyle(
+                Text(
+                  appConfig.schoolName,
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF2B3674),
@@ -256,7 +262,7 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
               if (value == 'settings') {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()));
               } else if (value == 'logout') {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                context.go(AppRoutes.login);
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
