@@ -25,7 +25,7 @@ mixin SafeAsync<T extends StatefulWidget> on State<T> {
         context.showSuccessSnackBar(successMessage);
       }
     } catch (e) {
-      final appError = handleSupabaseError(e);
+      final appError = handleApiError(e);
       logError(appError, context: 'SafeAsync');
 
       if (mounted) {

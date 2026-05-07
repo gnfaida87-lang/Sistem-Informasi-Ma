@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/wali_kelas_service.dart';
 import '../../../core/mixins/safe_async_mixin.dart';
+import '../../../core/providers/auth_provider.dart';
 
-class WaliKelasRekapScreen extends StatefulWidget {
+class WaliKelasRekapScreen extends ConsumerStatefulWidget {
   final String classId;
   final String className;
 
@@ -14,10 +15,10 @@ class WaliKelasRekapScreen extends StatefulWidget {
   });
 
   @override
-  State<WaliKelasRekapScreen> createState() => _WaliKelasRekapScreenState();
+  ConsumerState<WaliKelasRekapScreen> createState() => _WaliKelasRekapScreenState();
 }
 
-class _WaliKelasRekapScreenState extends State<WaliKelasRekapScreen> with SafeAsync {
+class _WaliKelasRekapScreenState extends ConsumerState<WaliKelasRekapScreen> with SafeAsync {
   final _waliKelasService = WaliKelasService();
   List<Map<String, dynamic>> _grades = [];
   List<Map<String, dynamic>> _attendance = [];
@@ -26,7 +27,9 @@ class _WaliKelasRekapScreenState extends State<WaliKelasRekapScreen> with SafeAs
   @override
   void initState() {
     super.initState();
-    _loadAllData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAllData();
+    });
   }
 
   Future<void> _loadAllData() async {
@@ -55,7 +58,7 @@ class _WaliKelasRekapScreenState extends State<WaliKelasRekapScreen> with SafeAs
       child: Scaffold(
         appBar: AppBar(
           title: Text('Rekap Kelas ${widget.className}', style: const TextStyle(fontSize: 16)),
-          backgroundColor: Colors.indigo.shade700,
+          backgroundColor: const Color(0xFF2B3674),
           foregroundColor: Colors.white,
           bottom: const TabBar(
             labelColor: Colors.white,
@@ -64,7 +67,7 @@ class _WaliKelasRekapScreenState extends State<WaliKelasRekapScreen> with SafeAs
             tabs: [
               Tab(text: 'Akademik'),
               Tab(text: 'Absensi'),
-              Tab(text: 'Catatan Kelas'),
+              Tab(text: 'Catatan'),
             ],
           ),
         ),
@@ -89,8 +92,8 @@ class _WaliKelasRekapScreenState extends State<WaliKelasRekapScreen> with SafeAs
         final item = _grades[index];
         return Card(
           child: ListTile(
-            title: Text(item['mapel']?['nama'] ?? 'Mata Pelajaran'),
-            trailing: Text(item['skor'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            title: Text(item['mapel_nama'] ?? 'Mata Pelajaran'),
+            trailing: Text(item['skor']?.toString() ?? '0', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           ),
         );
       },
@@ -99,14 +102,15 @@ class _WaliKelasRekapScreenState extends State<WaliKelasRekapScreen> with SafeAs
 
   Widget _buildAbsensiTab() {
     if (isLoading) return const Center(child: CircularProgressIndicator());
+    if (_attendance.isEmpty) return const Center(child: Text('Belum ada data absensi.'));
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _attendance.length,
       itemBuilder: (context, index) {
         final item = _attendance[index];
         return ListTile(
-          title: Text(item['siswa']?['nama'] ?? 'Siswa'),
-          trailing: _buildStatusBadge(item['status']),
+          title: Text(item['siswa_nama'] ?? 'Siswa'),
+          trailing: _buildStatusBadge(item['status'] ?? '-'),
         );
       },
     );
@@ -133,8 +137,8 @@ class _WaliKelasRekapScreenState extends State<WaliKelasRekapScreen> with SafeAs
           child: ElevatedButton.icon(
             onPressed: _showAddNoteDialog,
             icon: const Icon(Icons.add),
-            label: const Text('Tambah Catatan Perkembangan'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+            label: const Text('Tambah Catatan'),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2B3674), foregroundColor: Colors.white),
           ),
         ),
         Expanded(
@@ -146,27 +150,16 @@ class _WaliKelasRekapScreenState extends State<WaliKelasRekapScreen> with SafeAs
                   itemBuilder: (context, index) {
                     final note = _notes[index];
                     return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(4)),
-                                  child: Text(note['kategori'] ?? 'Umum', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.indigo.shade700)),
-                                ),
-                                Text(note['created_at']?.toString().split('T')[0] ?? '', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
+                            Text(note['kategori'] ?? 'Umum', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                            const SizedBox(height: 4),
                             Text(note['catatan'] ?? ''),
                             const Divider(),
-                            Text('Oleh: ${note['guru']?['nama'] ?? 'Guru'}', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
+                            Text('Oleh: ${note['guru_nama'] ?? 'Guru'}', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
                           ],
                         ),
                       ),
@@ -199,7 +192,7 @@ class _WaliKelasRekapScreenState extends State<WaliKelasRekapScreen> with SafeAs
               TextField(
                 controller: noteController,
                 maxLines: 3,
-                decoration: const InputDecoration(hintText: 'Tulis catatan di sini...'),
+                decoration: const InputDecoration(hintText: 'Isi catatan...'),
               ),
             ],
           ),
@@ -207,10 +200,10 @@ class _WaliKelasRekapScreenState extends State<WaliKelasRekapScreen> with SafeAs
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
             ElevatedButton(
               onPressed: () async {
-                final userId = Supabase.instance.client.auth.currentUser?.id;
-                if (userId == null) return;
+                final user = ref.read(authProvider).user;
+                if (user == null) return;
                 
-                final teacherId = await _waliKelasService.getTeacherIdByUserId(userId);
+                final teacherId = await _waliKelasService.getTeacherIdByUserId(user.id);
                 if (teacherId == null) return;
 
                 await _waliKelasService.addClassNote(widget.classId, teacherId, selectedCategory, noteController.text);

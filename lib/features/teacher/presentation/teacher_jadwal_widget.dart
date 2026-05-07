@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../academic_config/services/schedule_service.dart';
 import '../../academic_config/services/academic_service.dart';
 import '../../academic_config/models/scheduling_models.dart';
-import '../../academic_config/models/academic_models.dart';
+import '../services/teacher_service.dart';
 
-class TeacherJadwalWidget extends StatefulWidget {
+class TeacherJadwalWidget extends ConsumerStatefulWidget {
   const TeacherJadwalWidget({super.key});
 
   @override
-  State<TeacherJadwalWidget> createState() => _TeacherJadwalWidgetState();
+  ConsumerState<TeacherJadwalWidget> createState() => _TeacherJadwalWidgetState();
 }
 
-class _TeacherJadwalWidgetState extends State<TeacherJadwalWidget> {
+class _TeacherJadwalWidgetState extends ConsumerState<TeacherJadwalWidget> {
   final ScheduleService _scheduleService = ScheduleService();
   final AcademicService _academicService = AcademicService();
+  final TeacherService _teacherService = TeacherService();
   
   bool _isLoading = true;
   String? _errorMessage;
@@ -26,7 +28,9 @@ class _TeacherJadwalWidgetState extends State<TeacherJadwalWidget> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
   }
 
   Future<void> _loadData() async {
@@ -36,19 +40,16 @@ class _TeacherJadwalWidgetState extends State<TeacherJadwalWidget> {
     });
 
     try {
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = ref.read(authProvider).user;
       if (user == null) {
         throw 'User tidak ditemukan';
       }
 
-      // 1. Get Teacher Profile to get guru_id
-      final teacherResponse = await Supabase.instance.client
-          .from('guru')
-          .select('id')
-          .eq('user_id', user.id)
-          .single();
+      // 1. Get Teacher Profile
+      final profile = await _teacherService.getTeacherProfileByUserId(user.id);
+      if (profile == null) throw 'Profil guru tidak ditemukan';
       
-      final teacherId = teacherResponse['id'];
+      final teacherId = profile['id'];
 
       // 2. Get Active Semester
       final semesters = await _academicService.getActiveSemesters();
@@ -74,9 +75,7 @@ class _TeacherJadwalWidgetState extends State<TeacherJadwalWidget> {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_errorMessage != null) return Center(child: Text('Error: $_errorMessage'));
 
-    // Filter schedules by selected day
     final dailySchedules = _schedules.where((s) => s.day == _selectedDay).toList();
-    // Sort by start time
     dailySchedules.sort((a, b) => (a.startTime ?? '').compareTo(b.startTime ?? ''));
 
     return Column(
@@ -92,7 +91,7 @@ class _TeacherJadwalWidgetState extends State<TeacherJadwalWidget> {
   }
 
   Widget _buildDaySelector() {
-    return Container(
+    return SizedBox(
       height: 60,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
@@ -137,7 +136,9 @@ class _TeacherJadwalWidgetState extends State<TeacherJadwalWidget> {
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
-        final timeRange = '${(item.startTime ?? "00:00").substring(0, 5)} - ${(item.endTime ?? "00:00").substring(0, 5)}';
+        final startTime = (item.startTime ?? "00:00");
+        final endTime = (item.endTime ?? "00:00");
+        final timeRange = '${startTime.length > 5 ? startTime.substring(0, 5) : startTime} - ${endTime.length > 5 ? endTime.substring(0, 5) : endTime}';
         
         return Container(
           margin: const EdgeInsets.only(bottom: 16),

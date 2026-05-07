@@ -9,7 +9,7 @@ class AppConfig {
   String schoolName = "SI Madrasah";
   String headmasterName = "H. Ahmad Syaifuddin, M.Pd";
   
-  // In a real app, these would be URLs or local file paths from Supabase/Storage
+  // In a real app, these would be URLs or local file paths from Cloudflare R2
   String logoPath = ""; 
   String iconPath = "";
 

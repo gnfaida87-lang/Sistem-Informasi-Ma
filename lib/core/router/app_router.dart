@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ── Auth
 import '../../features/auth/presentation/login_screen.dart';
@@ -69,14 +68,8 @@ final GoRouter appRouter = GoRouter(
   initialLocation: AppRoutes.login,
   debugLogDiagnostics: kDebugMode,
   redirect: (BuildContext context, GoRouterState state) {
-    final session = Supabase.instance.client.auth.currentSession;
-    final isOnLoginPage = state.matchedLocation == AppRoutes.login;
-
-    if (session != null && isOnLoginPage) {
-      final role = session.user.userMetadata?['role'] as String? ?? '';
-      final isWaliKelas = session.user.userMetadata?['is_wali_kelas'] as bool? ?? false;
-      return AppRoutes.dashboardForRole(role, isWaliKelas: isWaliKelas);
-    }
+    // Redirection logic is handled in the presentation layer via authProvider.
+    // Auth logic is now handled via authProvider in the presentation layer.
     return null;
   },
   routes: [

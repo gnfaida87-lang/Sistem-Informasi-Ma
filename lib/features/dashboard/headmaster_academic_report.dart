@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/network/supabase_service.dart';
+import '../../core/network/d1_service.dart';
 
 class HeadmasterAcademicReport extends StatefulWidget {
   const HeadmasterAcademicReport({super.key});
@@ -9,6 +9,7 @@ class HeadmasterAcademicReport extends StatefulWidget {
 }
 
 class _HeadmasterAcademicReportState extends State<HeadmasterAcademicReport> {
+  final _d1Service = D1Service();
   List<Map<String, dynamic>> _classStats = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -26,20 +27,22 @@ class _HeadmasterAcademicReportState extends State<HeadmasterAcademicReport> {
     });
 
     try {
-      // Fetching classes joined with gurus (wali kelas)
-      // Note: This relies on 'kelas' and 'guru' tables
-      final response = await SupabaseService().client
-          .from('kelas')
-          .select('*, guru(nama)');
+      final data = await _d1Service.query(
+        """
+        SELECT k.*, g.nama as guru_nama 
+        FROM kelas k
+        LEFT JOIN guru g ON k.wali_id = g.id
+        ORDER BY k.nama ASC
+        """
+      );
       
-      final List<dynamic> data = response;
       setState(() {
-        _classStats = List<Map<String, dynamic>>.from(data);
+        _classStats = List<Map<String, dynamic>>.from(data as List);
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = "Gagal memuat data akademik. Pastikan tabel 'kelas' sudah disetup.";
+        _errorMessage = "Gagal memuat data akademik dari D1.";
         _isLoading = false;
       });
     }
@@ -52,103 +55,59 @@ class _HeadmasterAcademicReportState extends State<HeadmasterAcademicReport> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Text(
-                'Laporan Akademik Terpadu',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF2B3674),
-                ),
-              ),
-              const Spacer(),
-              ElevatedButton.icon(
-                onPressed: _fetchAcademicStats,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Refresh Data'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo.shade600,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ],
+          const Text(
+            'Laporan Akademik',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2B3674)),
           ),
           const SizedBox(height: 24),
-
-          // TABEL REKAP KELAS
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Rekapitulasi Kinerja per Kelas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-                const SizedBox(height: 16),
-                _isLoading 
-                  ? const Center(child: Padding(
-                      padding: EdgeInsets.all(40.0),
-                      child: CircularProgressIndicator(),
-                    ))
-                  : _errorMessage != null
-                    ? Center(child: Text(_errorMessage!))
-                    : _classStats.isEmpty
-                      ? const Center(child: Text('Belum ada data rombel tersedia.'))
-                      : SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            headingRowColor: WidgetStateProperty.all(Colors.indigo.shade50),
-                            columns: const [
-                              DataColumn(label: Text('Nama Kelas', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Wali Kelas', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Jumlah Siswa', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Rata-rata Nilai', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Ketuntasan', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
-                            ],
-                            rows: _classStats.map((item) {
-                              final teacherName = (item['guru'] != null && item['guru']['nama'] != null)
-                                  ? item['guru']['nama'].toString()
-                                  : 'Belum diisi';
-                              return _buildDataRow(
-                                item['nama']?.toString() ?? '-',
-                                teacherName,
-                                '0', // Placeholder
-                                '0.0', // Placeholder
-                                '0%', // Placeholder
-                              );
-                            }).toList(),
-                          ),
-                        ),
-              ],
-            ),
-          ),
+          _buildClassTable(),
         ],
       ),
     );
   }
 
-  DataRow _buildDataRow(String kelas, String wali, String jumlah, String nilai, String lulus) {
-    return DataRow(
-      cells: [
-        DataCell(Text(kelas, style: const TextStyle(fontWeight: FontWeight.bold))),
-        DataCell(Text(wali)),
-        DataCell(Text(jumlah)),
-        DataCell(Text(nilai, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold))),
-        DataCell(Text(lulus, style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold))),
-        DataCell(
-          TextButton(
-            onPressed: null,
-            child: const Text('Lihat Detail Rapor'),
-          ),
-        ),
-      ],
+  Widget _buildClassTable() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Rekapitulasi per Kelas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (_errorMessage != null)
+            Center(child: Text(_errorMessage!))
+          else if (_classStats.isEmpty)
+            const Center(child: Text('Belum ada data kelas.'))
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Nama Kelas', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Wali Kelas', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: _classStats.map((item) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(item['nama'] ?? '-')),
+                      DataCell(Text(item['guru_nama'] ?? 'Belum ditentukan')),
+                      DataCell(TextButton(onPressed: () {}, child: const Text('Detail'))),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

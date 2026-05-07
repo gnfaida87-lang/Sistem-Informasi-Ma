@@ -212,7 +212,7 @@ class _OperatorMasterMapelState extends ConsumerState<OperatorMasterMapel> with 
       context: context,
       successMessage: 'Berhasil import Mata Pelajaran!',
       action: () async {
-        // LOGIKA UNTUK INSERT KE SUPABASE DARI FILE EXCEL / CSV BISA DITAMBAHKAN DI SINI
+        // LOGIKA UNTUK INSERT KE D1/CLOUDFLARE DARI FILE EXCEL / CSV BISA DITAMBAHKAN DI SINI
         await Future.delayed(const Duration(seconds: 2)); // Simulasi
       },
     );

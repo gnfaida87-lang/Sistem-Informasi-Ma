@@ -1,19 +1,15 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../core/utils/error_handler.dart';
+import '../../../core/network/d1_service.dart';
 
 class WaliKelasService {
-  final _supabase = Supabase.instance.client;
+  final _d1Service = D1Service();
 
   // ── MANAJEMEN KELAS PERWALIAN ─────────────────────────────
   
   Future<String?> getTeacherIdByUserId(String userId) async {
     try {
-      final response = await _supabase
-          .from('guru')
-          .select('id')
-          .eq('user_id', userId)
-          .maybeSingle();
-      return response?['id'];
+      final sql = "SELECT id FROM teachers WHERE user_id = ? LIMIT 1";
+      final results = await _d1Service.query(sql, params: [userId]);
+      return results.isNotEmpty ? results.first['id'] as String? : null;
     } catch (e) {
       return null;
     }
@@ -21,13 +17,9 @@ class WaliKelasService {
 
   Future<Map<String, dynamic>?> fetchWaliKelasClass(String teacherId) async {
     try {
-      final response = await _supabase
-          .from('kelas')
-          .select('id, nama')
-          .eq('wali_kelas_id', teacherId)
-          .maybeSingle();
-      
-      return response;
+      final sql = "SELECT id, name as nama FROM classes WHERE teacher_id = ? LIMIT 1";
+      final results = await _d1Service.query(sql, params: [teacherId]);
+      return results.isNotEmpty ? results.first : null;
     } catch (e) {
       return null;
     }
@@ -35,16 +27,19 @@ class WaliKelasService {
 
   Future<List<Map<String, dynamic>>> fetchStudentsWithParents(String classId) async {
     try {
-      final response = await _supabase
-          .from('siswa')
-          .select('*, orang_tua_siswa(orang_tua(nama, no_hp))')
-          .eq('kelas_id', classId)
-          .order('nama');
-      return List<Map<String, dynamic>>.from(response);
+      final sql = """
+        SELECT s.*, p.name as parent_name, p.phone as parent_phone
+        FROM students s
+        LEFT JOIN student_parents sp ON s.id = sp.student_id
+        LEFT JOIN parents p ON sp.parent_id = p.id
+        WHERE s.class_id = ?
+        ORDER BY s.name
+      """;
+      final results = await _d1Service.query(sql, params: [classId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchStudentsWithParents');
-      throw err;
+      print("Error fetchStudentsWithParents: $e");
+      return [];
     }
   }
 
@@ -52,11 +47,15 @@ class WaliKelasService {
 
   Future<List<Map<String, dynamic>>> fetchClassGradesRecap(String classId) async {
     try {
-      final response = await _supabase
-          .from('nilai')
-          .select('skor, mapel(nama), siswa!inner(kelas_id)')
-          .eq('siswa.kelas_id', classId);
-      return List<Map<String, dynamic>>.from(response);
+      final sql = """
+        SELECT sg.score as skor, sub.name as mapel_nama
+        FROM student_grades sg
+        JOIN subjects sub ON sg.subject_id = sub.id
+        JOIN students s ON sg.student_id = s.id
+        WHERE s.class_id = ?
+      """;
+      final results = await _d1Service.query(sql, params: [classId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
       return [];
     }
@@ -64,11 +63,14 @@ class WaliKelasService {
 
   Future<List<Map<String, dynamic>>> fetchClassAttendanceRecap(String classId) async {
     try {
-      final response = await _supabase
-          .from('absensi')
-          .select('status, siswa!inner(kelas_id, nama)')
-          .eq('siswa.kelas_id', classId);
-      return List<Map<String, dynamic>>.from(response);
+      final sql = """
+        SELECT a.status, s.name as student_name
+        FROM attendance a
+        JOIN students s ON a.student_id = s.id
+        WHERE s.class_id = ?
+      """;
+      final results = await _d1Service.query(sql, params: [classId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
       return [];
     }
@@ -76,31 +78,27 @@ class WaliKelasService {
 
   Future<List<Map<String, dynamic>>> fetchClassNotes(String classId) async {
     try {
-      final response = await _supabase
-          .from('catatan_perkembangan')
-          .select('*, guru(nama)')
-          .eq('kelas_id', classId)
-          .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
+      final sql = """
+        SELECT dn.*, t.name as teacher_name
+        FROM development_notes dn
+        JOIN teachers t ON dn.teacher_id = t.id
+        WHERE dn.class_id = ?
+        ORDER BY dn.created_at DESC
+      """;
+      final results = await _d1Service.query(sql, params: [classId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
       return [];
     }
   }
 
-  // ── CATATAN PERKEMBANGAN ──────────────────────────────────
-
   Future<void> addClassNote(String classId, String teacherId, String category, String note) async {
     try {
-      await _supabase.from('catatan_perkembangan').insert({
-        'kelas_id': classId,
-        'guru_id': teacherId,
-        'kategori': category,
-        'catatan': note,
-      });
+      final sql = "INSERT INTO development_notes (class_id, teacher_id, category, note) VALUES (?, ?, ?, ?)";
+      await _d1Service.query(sql, params: [classId, teacherId, category, note]);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addClassNote');
-      throw err;
+      print("Error addClassNote: $e");
+      rethrow;
     }
   }
 }

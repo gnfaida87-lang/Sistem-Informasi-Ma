@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../academic_config/services/schedule_service.dart';
 import '../../academic_config/services/academic_service.dart';
 import '../../academic_config/models/scheduling_models.dart';
-import '../../academic_config/models/academic_models.dart';
+import '../services/parent_service.dart';
 
-class ParentJadwalWidget extends StatefulWidget {
+class ParentJadwalWidget extends ConsumerStatefulWidget {
   const ParentJadwalWidget({super.key});
 
   @override
-  State<ParentJadwalWidget> createState() => _ParentJadwalWidgetState();
+  ConsumerState<ParentJadwalWidget> createState() => _ParentJadwalWidgetState();
 }
 
-class _ParentJadwalWidgetState extends State<ParentJadwalWidget> {
+class _ParentJadwalWidgetState extends ConsumerState<ParentJadwalWidget> {
   final ScheduleService _scheduleService = ScheduleService();
   final AcademicService _academicService = AcademicService();
+  final ParentService _parentService = ParentService();
   
   bool _isLoading = true;
   String? _errorMessage;
@@ -26,7 +28,9 @@ class _ParentJadwalWidgetState extends State<ParentJadwalWidget> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
   }
 
   Future<void> _loadData() async {
@@ -36,24 +40,17 @@ class _ParentJadwalWidgetState extends State<ParentJadwalWidget> {
     });
 
     try {
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = ref.read(authProvider).user;
       if (user == null) {
         throw 'User tidak ditemukan';
       }
 
-      // 1. Get Child's Class ID via Orang Tua Siswa relation
-      // Note: Assuming the parent is logged in and we take the first child for now
-      final parentResponse = await Supabase.instance.client
-          .from('orang_tua')
-          .select('id, orang_tua_siswa(siswa(kelas_id))')
-          .eq('user_id', user.id)
-          .single();
+      // 1. Get Child's Class ID via Parent Profile
+      final profile = await _parentService.getParentDashboardProfile(user.id);
+      if (profile == null) throw 'Profil orang tua tidak ditemukan';
       
-      final List children = parentResponse['orang_tua_siswa'] ?? [];
-      if (children.isEmpty) throw 'Data anak tidak ditemukan';
-      
-      final classId = children.first['siswa']['kelas_id'];
-      if (classId == null) throw 'Anak belum terdaftar di kelas';
+      final classId = profile.classId;
+      if (classId.isEmpty) throw 'Data kelas anak tidak ditemukan';
 
       // 2. Get Active Semester
       final semesters = await _academicService.getActiveSemesters();
@@ -79,9 +76,7 @@ class _ParentJadwalWidgetState extends State<ParentJadwalWidget> {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_errorMessage != null) return Center(child: Text('Error: $_errorMessage'));
 
-    // Filter schedules by selected day
     final dailySchedules = _schedules.where((s) => s.day == _selectedDay).toList();
-    // Sort by start time
     dailySchedules.sort((a, b) => (a.startTime ?? '').compareTo(b.startTime ?? ''));
 
     return Column(
@@ -97,7 +92,7 @@ class _ParentJadwalWidgetState extends State<ParentJadwalWidget> {
   }
 
   Widget _buildDaySelector() {
-    return Container(
+    return SizedBox(
       height: 60,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
@@ -142,7 +137,9 @@ class _ParentJadwalWidgetState extends State<ParentJadwalWidget> {
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
-        final timeRange = '${(item.startTime ?? "00:00").substring(0, 5)} - ${(item.endTime ?? "00:00").substring(0, 5)}';
+        final startTime = (item.startTime ?? "00:00");
+        final endTime = (item.endTime ?? "00:00");
+        final timeRange = '${startTime.length > 5 ? startTime.substring(0, 5) : startTime} - ${endTime.length > 5 ? endTime.substring(0, 5) : endTime}';
         
         return Container(
           margin: const EdgeInsets.only(bottom: 16),

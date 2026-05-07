@@ -1,500 +1,218 @@
-// lib/features/master_data/services/master_service.dart
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/network/d1_service.dart';
 import '../models/master_models.dart';
-import '../../../core/utils/error_handler.dart';
 
 class MasterService {
-  final _supabase = Supabase.instance.client;
+  final _d1Service = D1Service();
 
   // ── SISWA (STUDENTS) ──────────────────────────────────
   Future<List<Student>> fetchAllStudents() async {
     try {
-      final response = await _supabase
-          .from('siswa')
-          .select('*, orang_tua_siswa(orang_tua(*))')
-          .order('nama');
-      return response.map((e) => Student.fromJson(e)).toList();
+      final sql = """
+        SELECT s.*, p.name as parent_name, p.phone as parent_phone
+        FROM students s
+        LEFT JOIN student_parents sp ON s.id = sp.student_id
+        LEFT JOIN parents p ON sp.parent_id = p.id
+        ORDER BY s.name
+      """;
+      final results = await _d1Service.query(sql);
+      return results.map((e) => Student.fromJson(e)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchAllStudents');
-      throw err;
+      print("Error fetchAllStudents: $e");
+      return [];
     }
   }
 
   Future<void> addStudent(Student student) async {
     try {
-      await _supabase.from('siswa').insert(student.toJson());
+      const sql = "INSERT INTO students (id, nis, name, class_id, is_active) VALUES (?, ?, ?, ?, ?)";
+      await _d1Service.query(sql, params: [student.id, student.nis, student.name, student.classId, 1]);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addStudent');
-      throw err;
-    }
-  }
-
-  Future<void> updateStudent(Student student) async {
-    try {
-      await _supabase
-          .from('siswa')
-          .update(student.toJson())
-          .eq('id', student.id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'updateStudent');
-      throw err;
-    }
-  }
-
-  Future<void> deleteStudent(String id) async {
-    try {
-      await _supabase.from('siswa').delete().eq('id', id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'deleteStudent');
-      throw err;
+      print("Error addStudent: $e");
+      rethrow;
     }
   }
 
   // ── GURU (TEACHERS) ───────────────────────────────────
   Future<List<Teacher>> fetchAllTeachers() async {
     try {
-      final response = await _supabase
-          .from('guru')
-          .select('id, nip, nama, is_wali_kelas')
-          .order('nama');
-      return response.map((e) => Teacher.fromJson(e)).toList();
+      const sql = "SELECT id, nip, name as nama, is_wali_kelas FROM teachers ORDER BY name";
+      final results = await _d1Service.query(sql);
+      return results.map((e) => Teacher.fromJson(e)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchAllTeachers');
-      throw err;
-    }
-  }
-
-  Future<void> addTeacher(Teacher teacher) async {
-    try {
-      await _supabase.from('guru').insert(teacher.toJson());
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addTeacher');
-      throw err;
-    }
-  }
-
-  Future<void> updateTeacher(Teacher teacher) async {
-    try {
-      await _supabase
-          .from('guru')
-          .update(teacher.toJson())
-          .eq('id', teacher.id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'updateTeacher');
-      throw err;
-    }
-  }
-
-  Future<void> deleteTeacher(String id) async {
-    try {
-      await _supabase.from('guru').delete().eq('id', id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'deleteTeacher');
-      throw err;
+      print("Error fetchAllTeachers: $e");
+      return [];
     }
   }
 
   // ── KELAS (CLASSES) ───────────────────────────────────
   Future<List<ClassRoom>> fetchAllClasses() async {
     try {
-      // Fetch with wali_kelas join if needed, or simple fetch
-      final response = await _supabase
-          .from('kelas')
-          .select('id, nama, wali_kelas_id, kapasitas')
-          .order('nama');
-      return response.map((e) => ClassRoom.fromJson(e)).toList();
+      const sql = "SELECT id, name as nama, teacher_id as wali_kelas_id FROM classes ORDER BY name";
+      final results = await _d1Service.query(sql);
+      return results.map((e) => ClassRoom.fromJson(e)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchAllClasses');
-      throw err;
-    }
-  }
-
-  Future<void> addClass(ClassRoom classRoom) async {
-    try {
-      await _supabase.from('kelas').insert(classRoom.toJson());
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addClass');
-      throw err;
-    }
-  }
-
-  Future<void> updateClass(ClassRoom classRoom) async {
-    try {
-      await _supabase
-          .from('kelas')
-          .update(classRoom.toJson())
-          .eq('id', classRoom.id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'updateClass');
-      throw err;
-    }
-  }
-
-  Future<void> deleteClass(String id) async {
-    try {
-      await _supabase.from('kelas').delete().eq('id', id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'deleteClass');
-      throw err;
+      print("Error fetchAllClasses: $e");
+      return [];
     }
   }
 
   // ── MAPEL (SUBJECTS) ──────────────────────────────────
   Future<List<Subject>> fetchAllSubjects() async {
     try {
-      final response = await _supabase
-          .from('mapel')
-          .select('id, kode, nama, kkm')
-          .order('nama');
-      return response.map((e) => Subject.fromJson(e)).toList();
+      const sql = "SELECT id, code as kode, name as nama, min_score as kkm FROM subjects ORDER BY name";
+      final results = await _d1Service.query(sql);
+      return results.map((e) => Subject.fromJson(e)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchAllSubjects');
-      throw err;
+      print("Error fetchAllSubjects: $e");
+      return [];
     }
   }
 
   Future<void> addSubject(Subject subject) async {
     try {
-      await _supabase.from('mapel').insert(subject.toJson());
+      const sql = "INSERT INTO subjects (id, code, name, min_score) VALUES (?, ?, ?, ?)";
+      final id = subject.id.isEmpty
+          ? 'subj_${DateTime.now().millisecondsSinceEpoch}'
+          : subject.id;
+      await _d1Service.query(sql, params: [id, subject.code, subject.name, subject.kkm]);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addSubject');
-      throw err;
+      print("Error addSubject: $e");
+      rethrow;
     }
   }
 
   Future<void> updateSubject(Subject subject) async {
     try {
-      await _supabase
-          .from('mapel')
-          .update(subject.toJson())
-          .eq('id', subject.id);
+      const sql = "UPDATE subjects SET code = ?, name = ?, min_score = ? WHERE id = ?";
+      await _d1Service.query(sql, params: [subject.code, subject.name, subject.kkm, subject.id]);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'updateSubject');
-      throw err;
+      print("Error updateSubject: $e");
+      rethrow;
     }
   }
 
   Future<void> deleteSubject(String id) async {
     try {
-      await _supabase.from('mapel').delete().eq('id', id);
+      await _d1Service.query("DELETE FROM subjects WHERE id = ?", params: [id]);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'deleteSubject');
-      throw err;
-    }
-  }
-
-  // ── JURUSAN (MAJORS) ──────────────────────────────────
-  Future<List<Major>> fetchAllMajors() async {
-    try {
-      final response = await _supabase
-          .from('jurusan')
-          .select('id, kode, nama')
-          .order('nama');
-      return response.map((e) => Major.fromJson(e)).toList();
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchAllMajors');
-      throw err;
-    }
-  }
-
-  Future<void> addMajor(Major major) async {
-    try {
-      await _supabase.from('jurusan').insert(major.toJson());
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addMajor');
-      throw err;
-    }
-  }
-
-  Future<void> updateMajor(Major major) async {
-    try {
-      await _supabase
-          .from('jurusan')
-          .update(major.toJson())
-          .eq('id', major.id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'updateMajor');
-      throw err;
-    }
-  }
-
-  Future<void> deleteMajor(String id) async {
-    try {
-      await _supabase.from('jurusan').delete().eq('id', id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'deleteMajor');
-      throw err;
+      print("Error deleteSubject: $e");
+      rethrow;
     }
   }
 
   // ── TAHUN AJARAN (ACADEMIC YEARS) ─────────────────────
   Future<List<AcademicYear>> fetchAllAcademicYears() async {
     try {
-      final response = await _supabase
-          .from('tahun_ajaran')
-          .select('id, tahun, is_active')
-          .order('tahun', ascending: false);
-      return response.map((e) => AcademicYear.fromJson(e)).toList();
+      const sql = "SELECT id, year_name as tahun, is_active FROM academic_years ORDER BY year_name DESC";
+      final results = await _d1Service.query(sql);
+      return results.map((e) => AcademicYear.fromJson(e)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchAllAcademicYears');
-      throw err;
+      print("Error fetchAllAcademicYears: $e");
+      return [];
     }
   }
 
-  Future<AcademicYear> fetchActiveAcademicYear() async {
+  Future<AcademicYear?> fetchActiveAcademicYear() async {
     try {
-      final response = await _supabase
-          .from('tahun_ajaran')
-          .select('id, tahun, is_active')
-          .eq('is_active', true)
-          .single();
-      return AcademicYear.fromJson(response);
+      const sql = "SELECT id, year_name as tahun, is_active FROM academic_years WHERE is_active = 1 LIMIT 1";
+      final results = await _d1Service.query(sql);
+      return results.isNotEmpty ? AcademicYear.fromJson(results.first) : null;
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchActiveAcademicYear');
-      throw err;
+      return null;
     }
   }
 
-  Future<void> addAcademicYear(AcademicYear academicYear) async {
+  // ── JURUSAN (MAJORS) ──────────────────────────────────
+  Future<List<Major>> fetchAllMajors() async {
     try {
-      await _supabase.from('tahun_ajaran').insert(academicYear.toJson());
+      const sql = "SELECT id, code as kode, name as nama FROM majors ORDER BY name";
+      final results = await _d1Service.query(sql);
+      return results.map((e) => Major.fromJson(e)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addAcademicYear');
-      throw err;
+      print("Error fetchAllMajors: $e");
+      return [];
     }
   }
 
-  Future<void> updateAcademicYear(AcademicYear academicYear) async {
-    try {
-      await _supabase
-          .from('tahun_ajaran')
-          .update(academicYear.toJson())
-          .eq('id', academicYear.id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'updateAcademicYear');
-      throw err;
-    }
-  }
-
-  Future<void> deleteAcademicYear(String id) async {
-    try {
-      await _supabase.from('tahun_ajaran').delete().eq('id', id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'deleteAcademicYear');
-      throw err;
-    }
-  }
-
-  // ── EKSKUL (EXTRACURRICULAR) ──────────────────────────
+  // ── EKSKUL (EXTRACURRICULARS) ─────────────────────────
   Future<List<Extracurricular>> fetchAllEkskul() async {
     try {
-      final response = await _supabase
-          .from('ekskul')
-          .select('id, nama, pembina')
-          .order('nama');
-      return response.map((e) => Extracurricular.fromJson(e)).toList();
+      const sql = "SELECT id, name as nama, coach as pembina FROM extracurriculars ORDER BY name";
+      final results = await _d1Service.query(sql);
+      return results.map((e) => Extracurricular.fromJson(e)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchAllEkskul');
-      throw err;
+      print("Error fetchAllEkskul: $e");
+      return [];
     }
   }
 
-  Future<void> addEkskul(Extracurricular ekskul) async {
+  Future<List<EkskulParticipant>> fetchEkskulParticipants(String ekskulId) async {
     try {
-      await _supabase.from('ekskul').insert(ekskul.toJson());
+      const sql = """
+        SELECT ep.*, s.name as siswa_nama, s.nis as siswa_nis
+        FROM extracurricular_participants ep
+        JOIN students s ON ep.student_id = s.id
+        WHERE ep.extracurricular_id = ?
+        ORDER BY s.name
+      """;
+      final results = await _d1Service.query(sql, params: [ekskulId]);
+      return results.map((e) => EkskulParticipant.fromJson({
+        ...e,
+        'ekskul_id': ekskulId,
+        'siswa_id': e['student_id'],
+        'siswa': {'id': e['student_id'], 'nama': e['siswa_nama'], 'nis': e['siswa_nis']},
+      })).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addEkskul');
-      throw err;
-    }
-  }
-
-  Future<void> updateEkskul(Extracurricular ekskul) async {
-    try {
-      await _supabase
-          .from('ekskul')
-          .update(ekskul.toJson())
-          .eq('id', ekskul.id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'updateEkskul');
-      throw err;
-    }
-  }
-
-  Future<void> deleteEkskul(String id) async {
-    try {
-      await _supabase.from('ekskul').delete().eq('id', id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'deleteEkskul');
-      throw err;
+      print("Error fetchEkskulParticipants: $e");
+      return [];
     }
   }
 
   // ── BIMBEL (TUTORING) ─────────────────────────────────
   Future<List<Tutoring>> fetchAllBimbel() async {
     try {
-      final response = await _supabase
-          .from('program_bimbel')
-          .select('id, nama, guru_id')
-          .order('nama');
-      return response.map((e) => Tutoring.fromJson(e)).toList();
+      const sql = "SELECT id, name as nama, teacher_id as guru_id FROM tutoring_programs ORDER BY name";
+      final results = await _d1Service.query(sql);
+      return results.map((e) => Tutoring.fromJson(e)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchAllBimbel');
-      throw err;
+      print("Error fetchAllBimbel: $e");
+      return [];
     }
   }
 
-  Future<void> addBimbel(Tutoring bimbel) async {
+  Future<List<BimbelParticipant>> fetchBimbelParticipants(String bimbelId) async {
     try {
-      await _supabase.from('program_bimbel').insert(bimbel.toJson());
+      const sql = """
+        SELECT bp.*, s.name as siswa_nama, s.nis as siswa_nis
+        FROM tutoring_participants bp
+        JOIN students s ON bp.student_id = s.id
+        WHERE bp.program_id = ?
+        ORDER BY s.name
+      """;
+      final results = await _d1Service.query(sql, params: [bimbelId]);
+      return results.map((e) => BimbelParticipant.fromJson({
+        ...e,
+        'siswa_id': e['student_id'],
+        'siswa': {'id': e['student_id'], 'nama': e['siswa_nama'], 'nis': e['siswa_nis']},
+      })).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addBimbel');
-      throw err;
+      print("Error fetchBimbelParticipants: $e");
+      return [];
     }
   }
 
-  Future<void> updateBimbel(Tutoring bimbel) async {
-    try {
-      await _supabase
-          .from('program_bimbel')
-          .update(bimbel.toJson())
-          .eq('id', bimbel.id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'updateBimbel');
-      throw err;
-    }
-  }
-
-  Future<void> deleteBimbel(String id) async {
-    try {
-      await _supabase.from('program_bimbel').delete().eq('id', id);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'deleteBimbel');
-      throw err;
-    }
-  }
-
-  // ── PESERTA BIMBEL (BIMBEL PARTICIPANTS) ──────────────
-  Future<List<BimbelParticipant>> fetchBimbelParticipants(String programId) async {
-    try {
-      final response = await _supabase
-          .from('peserta_bimbel')
-          .select('id, program_id, siswa_id, siswa:siswa(*)')
-          .eq('program_id', programId);
-      return response.map((e) => BimbelParticipant.fromJson(e)).toList();
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchBimbelParticipants');
-      throw err;
-    }
-  }
-
-  Future<void> addBimbelParticipant(String programId, String studentId) async {
-    try {
-      await _supabase.from('peserta_bimbel').insert({
-        'program_id': programId,
-        'siswa_id': studentId,
-      });
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addBimbelParticipant');
-      throw err;
-    }
-  }
-
-  Future<void> removeBimbelParticipant(String participantId) async {
-    try {
-      await _supabase.from('peserta_bimbel').delete().eq('id', participantId);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'removeBimbelParticipant');
-      throw err;
-    }
-  }
-
-  // ── PESERTA EKSKUL (EKSKUL PARTICIPANTS) ──────────────
-  Future<List<EkskulParticipant>> fetchEkskulParticipants(String ekskulId) async {
-    try {
-      final response = await _supabase
-          .from('peserta_ekskul')
-          .select('id, ekskul_id, siswa_id, siswa:siswa(*)')
-          .eq('ekskul_id', ekskulId);
-      return response.map((e) => EkskulParticipant.fromJson(e)).toList();
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchEkskulParticipants');
-      throw err;
-    }
-  }
-
-  Future<void> addEkskulParticipant(String ekskulId, String studentId) async {
-    try {
-      await _supabase.from('peserta_ekskul').insert({
-        'ekskul_id': ekskulId,
-        'siswa_id': studentId,
-      });
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'addEkskulParticipant');
-      throw err;
-    }
-  }
-
-  Future<void> removeEkskulParticipant(String participantId) async {
-    try {
-      await _supabase.from('peserta_ekskul').delete().eq('id', participantId);
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'removeEkskulParticipant');
-      throw err;
-    }
-  }
-
+  // ── SEARCH ───────────────────────────────────────────
   Future<List<Student>> searchStudents(String query) async {
     try {
-      final response = await _supabase
-          .from('siswa')
-          .select('*, orang_tua_siswa(orang_tua(*))')
-          .or('nama.ilike.%$query%,nis.ilike.%$query%')
-          .limit(10);
-      return response.map((e) => Student.fromJson(e)).toList();
+      const sql = """
+        SELECT s.* FROM students s 
+        WHERE s.name LIKE ? OR s.nis LIKE ? 
+        LIMIT 10
+      """;
+      final results = await _d1Service.query(sql, params: ["%$query%", "%$query%"]);
+      return results.map((e) => Student.fromJson(e)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'searchStudents');
-      throw err;
+      return [];
     }
   }
 }
-

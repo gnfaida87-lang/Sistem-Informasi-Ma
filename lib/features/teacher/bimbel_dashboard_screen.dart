@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/router/app_router.dart';
 import '../../core/mixins/safe_async_mixin.dart';
+import '../../core/providers/auth_provider.dart';
 import 'services/teacher_service.dart';
 import 'services/bimbel_service.dart';
 import 'models/teacher_models.dart';
 import 'bimbel_submenus_screen.dart';
 
-class BimbelDashboardScreen extends StatefulWidget {
+class BimbelDashboardScreen extends ConsumerStatefulWidget {
   const BimbelDashboardScreen({super.key});
 
   @override
-  State<BimbelDashboardScreen> createState() => _BimbelDashboardScreenState();
+  ConsumerState<BimbelDashboardScreen> createState() => _BimbelDashboardScreenState();
 }
 
-class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with SafeAsync {
+class _BimbelDashboardScreenState extends ConsumerState<BimbelDashboardScreen> with SafeAsync {
   int _currentIndex = 0;
   final _teacherService = TeacherService();
   final _bimbelService = BimbelService();
@@ -25,16 +26,18 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
   @override
   void initState() {
     super.initState();
-    _initDashboard();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initDashboard();
+    });
   }
 
   Future<void> _initDashboard() async {
     await safeCall(
       context: context,
       action: () async {
-        final userId = Supabase.instance.client.auth.currentUser?.id;
-        if (userId != null) {
-          final profileData = await _teacherService.getTeacherProfileByUserId(userId);
+        final user = ref.read(authProvider).user;
+        if (user != null) {
+          final profileData = await _teacherService.getTeacherProfileByUserId(user.id);
           if (profileData != null) {
             setState(() => _profile = profileData);
             final sessionData = await _bimbelService.fetchTutorSessions(profileData['id']);
@@ -47,7 +50,6 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
 
   @override
   Widget build(BuildContext context) {
-    // Scaffold dengan BottomNavigationBar Khusus Tampilan Mobile
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
@@ -100,16 +102,12 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
     }
   }
 
-  // ==========================================
-  // TAB 1: HOME (GRID MODEREN MOBILE FRIENDLY)
-  // ==========================================
   Widget _buildHomeTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // HEADER PROFIL SINGKAT
           Row(
             children: [
               const CircleAvatar(
@@ -142,7 +140,6 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
           ),
           const SizedBox(height: 24),
 
-          // KARTU SUMMARY HARI INI
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -174,14 +171,13 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
           ),
           const SizedBox(height: 32),
 
-          // GRID MENU UTAMA BIMBEL
           const Text('Modul Bimbingan Belajar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
           const SizedBox(height: 20),
           GridView.count(
             crossAxisCount: 3,
             mainAxisSpacing: 20,
             crossAxisSpacing: 16,
-            childAspectRatio: 0.8, // Memberikan ruang vertikal lebih
+            childAspectRatio: 0.8,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             children: [
@@ -199,13 +195,11 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
             ],
           ),
           const SizedBox(height: 32),
-
         ],
       ),
     );
   }
 
-  // BOTTOM SHEET SUB-MENU JADWAL
   void _showSubmenuJadwal() {
     showModalBottomSheet(
       context: context,
@@ -224,7 +218,7 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
                 title: const Text('Jadwal Hari Ini'),
                 onTap: () { 
                   Navigator.pop(context); 
-                  setState(() => _currentIndex = 1); // Pindah ke tab jadwal
+                  setState(() => _currentIndex = 1);
                 },
               ),
             ],
@@ -422,7 +416,6 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
     );
   }
 
-
   void _showSubmenuPengumuman() {
     showModalBottomSheet(
       context: context,
@@ -448,15 +441,12 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
     );
   }
 
-
   Widget _buildMenuIcon(BuildContext context, String title, IconData icon, MaterialColor color, VoidCallback onTap) {
-    // Ukuran responsif berdasarkan lebar layar
     double screenWidth = MediaQuery.of(context).size.width;
-    double iconBoxSize = screenWidth * 0.16; // Kotak ikon lebih besar
+    double iconBoxSize = screenWidth * 0.16;
     if (iconBoxSize > 70) iconBoxSize = 70;
     if (iconBoxSize < 50) iconBoxSize = 50;
-
-    double iconSize = iconBoxSize * 0.5; // Ukuran ikon di dalam kotak
+    double iconSize = iconBoxSize * 0.5;
 
     return InkWell(
       onTap: onTap,
@@ -498,9 +488,6 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
     );
   }
 
-  // ==========================================
-  // TAB 2: JADWAL BIMBEL
-  // ==========================================
   Widget _buildJadwalTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -567,9 +554,6 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
     );
   }
 
-  // ==========================================
-  // TAB 3: AKUN SAYA
-  // ==========================================
   Widget _buildAkunTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -579,7 +563,6 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
           const Text('Profil Tutor', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
           const SizedBox(height: 32),
           
-          // AREA UPLOAD FOTO
           Stack(
             children: [
               Container(
@@ -608,11 +591,9 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
           Text(_profile?['nip'] ?? 'NIP tidak tersedia', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
           const SizedBox(height: 32),
 
-          // FORM BIODATA
-          _buildBioField('Nama Lengkap', 'Dr. Ilham Ramadhani'),
-          _buildBioField('Materi Pegangan', 'Persiapan UTBK & Olimpiade'),
-          _buildBioField('Nomor HP / WA', '0852-1234-9090'),
-          _buildBioField('Afiliasi / Universitas', 'Lembaga Bimbingan UI'),
+          _buildBioField('Nama Lengkap', _profile?['nama'] ?? '-'),
+          _buildBioField('Materi Pegangan', 'Tutor Bimbel'),
+          _buildBioField('Nomor HP / WA', '-'),
           const SizedBox(height: 32),
 
           SizedBox(
@@ -628,6 +609,7 @@ class _BimbelDashboardScreenState extends State<BimbelDashboardScreen> with Safe
             width: double.infinity,
             child: OutlinedButton(
               onPressed: () {
+                ref.read(authProvider.notifier).logout();
                 context.go(AppRoutes.login);
               },
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),

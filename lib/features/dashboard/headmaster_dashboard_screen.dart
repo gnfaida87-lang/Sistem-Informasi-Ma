@@ -1,29 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/router/app_router.dart';
-import '../../core/network/supabase_service.dart';
+import '../../core/network/d1_service.dart';
+import '../../core/providers/auth_provider.dart';
 import 'headmaster_academic_report.dart';
 import 'headmaster_finance_report.dart';
 import 'headmaster_announcement.dart';
-import '../auth/presentation/login_screen.dart';
 import '../../shared/widgets/profile_settings_screen.dart';
 
-class HeadmasterDashboardScreen extends StatefulWidget {
+class HeadmasterDashboardScreen extends ConsumerStatefulWidget {
   const HeadmasterDashboardScreen({super.key});
 
   @override
-  State<HeadmasterDashboardScreen> createState() => _HeadmasterDashboardScreenState();
+  ConsumerState<HeadmasterDashboardScreen> createState() => _HeadmasterDashboardScreenState();
 }
 
-class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
+class _HeadmasterDashboardScreenState extends ConsumerState<HeadmasterDashboardScreen> {
+  final _d1Service = D1Service();
   int _selectedIndex = 0;
   bool _isLoading = true;
   
-  // Real Statistics
   int _totalSiswa = 0;
   int _totalGuru = 0;
-  double _avgAttendance = 96.5; // Dummy until absensi table exists
+  double _avgAttendance = 96.5; 
   String _totalFinance = "Rp 0";
 
   @override
@@ -35,37 +35,22 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
   Future<void> _fetchExecutiveSummary() async {
     setState(() => _isLoading = true);
     try {
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = ref.read(authProvider).user;
       
       if (user != null) {
-        // ── JALUR RIIL (SUPABASE) ────────────────────────
-        final client = SupabaseService().client;
-        final siswaCount = await client.from('siswa').select('id').filter('status', 'eq', 'active');
-        final guruCount = await client.from('guru').select('id');
+        final siswaData = await _d1Service.query("SELECT COUNT(*) as count FROM siswa");
+        final guruData = await _d1Service.query("SELECT COUNT(*) as count FROM guru");
         
         if (mounted) {
           setState(() {
-            _totalSiswa = (siswaCount as List).length;
-            _totalGuru = (guruCount as List).length;
+            _totalSiswa = (siswaData as List).first['count'] ?? 0;
+            _totalGuru = (guruData as List).first['count'] ?? 0;
             _totalFinance = "Rp 0";
-            _isLoading = false;
-          });
-        }
-      } else {
-        // ── JALUR DEMO (SIMULASI DATA) ───────────────────
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted) {
-          setState(() {
-            _totalSiswa = 1250;
-            _totalGuru = 84;
-            _totalFinance = "Rp 124.5M";
-            _avgAttendance = 98.2;
             _isLoading = false;
           });
         }
       }
     } catch (e) {
-      debugPrint('Error fetching executive summary: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -127,7 +112,7 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.indigo.shade600,
+                    color: const Color(0xFF2B3674),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(Icons.account_balance, color: Colors.white, size: 20),
@@ -155,9 +140,7 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
                   child: InkWell(
                     onTap: () {
-                      setState(() {
-                        _selectedIndex = index;
-                      });
+                      setState(() => _selectedIndex = index);
                       if (MediaQuery.of(context).size.width <= 800) {
                         Navigator.pop(context);
                       }
@@ -165,7 +148,7 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: isSelected ? Colors.indigo.shade50 : Colors.transparent,
+                        color: isSelected ? const Color(0xFFF4F7FE) : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -173,14 +156,14 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
                         children: [
                           Icon(
                             _menuItems[index]['icon'],
-                            color: isSelected ? Colors.indigo.shade600 : Colors.grey.shade500,
+                            color: isSelected ? const Color(0xFF2B3674) : Colors.grey.shade500,
                             size: 22,
                           ),
                           const SizedBox(width: 16),
                           Text(
                             _menuItems[index]['title'],
                             style: TextStyle(
-                              color: isSelected ? Colors.indigo.shade700 : Colors.grey.shade600,
+                              color: isSelected ? const Color(0xFF2B3674) : Colors.grey.shade600,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                               fontSize: 14,
                             ),
@@ -210,93 +193,22 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
               icon: const Icon(Icons.menu, color: Colors.grey),
               onPressed: () => Scaffold.of(context).openDrawer(),
             ),
-          if (isDesktop)
-            IconButton(
-              icon: const Icon(Icons.menu_open, color: Colors.grey),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-          const SizedBox(width: 16),
-          Container(
-            width: 250,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Cari laporan / siswa...',
-                        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                        border: InputBorder.none,
-                      ),
-                    ),
-                  ),
-                ),
-                Container(
-                  height: double.infinity,
-                  width: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.indigo.shade600,
-                    borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(8),
-                      bottomRight: Radius.circular(8),
-                    ),
-                  ),
-                  child: const Icon(Icons.search, color: Colors.white, size: 20),
-                ),
-              ],
-            ),
-          ),
           const Spacer(),
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               const Text('Kepala Madrasah', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2B3674))),
-              Text('Monitoring Eksekutif', style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+              Text('SI Madrasah', style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
             ],
           ),
           const SizedBox(width: 12),
-          PopupMenuButton<String>(
-            offset: const Offset(0, 48),
-            onSelected: (value) {
-              if (value == 'settings') {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()));
-              } else if (value == 'logout') {
-                context.go(AppRoutes.login);
-              }
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.red),
+            onPressed: () {
+              ref.read(authProvider.notifier).logout();
+              context.go(AppRoutes.login);
             },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
-                value: 'settings',
-                child: ListTile(
-                  leading: Icon(Icons.settings, size: 20),
-                  title: Text('Pengaturan Profil', style: TextStyle(fontSize: 14)),
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(
-                value: 'logout',
-                child: ListTile(
-                  leading: Icon(Icons.logout, size: 20, color: Colors.red),
-                  title: Text('Keluar (Logout)', style: TextStyle(fontSize: 14, color: Colors.red)),
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                ),
-              ),
-            ],
-            child: const CircleAvatar(
-              backgroundColor: Colors.indigo,
-              radius: 18,
-              child: Icon(Icons.person, size: 20, color: Colors.white),
-            ),
           ),
         ],
       ),
@@ -305,16 +217,11 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
 
   Widget _getCurrentScreen() {
     switch (_selectedIndex) {
-      case 0:
-        return _buildMainContent();
-      case 1:
-        return const HeadmasterAcademicReport();
-      case 2:
-        return const HeadmasterFinanceReport();
-      case 3:
-        return const HeadmasterAnnouncement();
-      default:
-        return _buildMainContent();
+      case 0: return _buildMainContent();
+      case 1: return const HeadmasterAcademicReport();
+      case 2: return const HeadmasterFinanceReport();
+      case 3: return const HeadmasterAnnouncement();
+      default: return _buildMainContent();
     }
   }
 
@@ -324,79 +231,34 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Text(
-                'Dashboard Ringkasan',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF2B3674),
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                child: Row(
-                  children: [
-                    Icon(Icons.calendar_today_outlined, size: 14, color: Colors.grey.shade600),
-                    const SizedBox(width: 8),
-                    Text('Semester Ganjil 2025/2026', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                  ],
-                ),
-              )
-            ],
+          const Text(
+            'Ringkasan Eksekutif',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2B3674)),
           ),
           const SizedBox(height: 24),
-
-          // 4 STAT CARDS
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth > 800;
-              return GridView.count(
-                crossAxisCount: isDesktop ? 4 : (constraints.maxWidth > 500 ? 2 : 1),
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: isDesktop ? 2.2 : 2.5,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                   _buildStatCard(Colors.blueAccent, _totalSiswa.toString(), 'Total Siswa Aktif', Icons.people_alt),
-                   _buildStatCard(Colors.green, '$_avgAttendance%', 'Rata-rata Kehadiran', Icons.how_to_reg),
-                   _buildStatCard(Colors.orangeAccent, '88.2%', 'Persentase Ketuntasan (KKM)', Icons.fact_check),
-                   _buildStatCard(Colors.purpleAccent, _totalFinance, 'Pemasukan SPP (Bulan Ini)', Icons.payments),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-
-          // ROW CHARTS
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth > 800;
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: isDesktop ? 6 : 1,
-                    child: _buildAcademicChart(),
-                  ),
-                  if (isDesktop) const SizedBox(width: 24),
-                  if (isDesktop)
-                    Expanded(
-                      flex: 4,
-                      child: _buildFinancialSummary(),
-                    ),
-                ],
-              );
-            },
-          ),
-
-          if (!MediaQuery.of(context).size.width.isFinite || MediaQuery.of(context).size.width <= 800) ...[
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator())
+          else ...[
+            GridView.count(
+              crossAxisCount: MediaQuery.of(context).size.width > 800 ? 4 : 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 2.2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _buildStatCard(Colors.blue, _totalSiswa.toString(), 'Siswa Aktif', Icons.people_alt),
+                _buildStatCard(Colors.green, '$_avgAttendance%', 'Kehadiran', Icons.how_to_reg),
+                _buildStatCard(Colors.orange, '88.2%', 'Ketuntasan', Icons.fact_check),
+                _buildStatCard(Colors.purple, _totalFinance, 'Pemasukan', Icons.payments),
+              ],
+            ),
             const SizedBox(height: 24),
-            _buildFinancialSummary(),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+              child: const Text('Monitoring data madrasah secara real-time dari Cloudflare D1.'),
+            ),
           ],
         ],
       ),
@@ -405,135 +267,26 @@ class _HeadmasterDashboardScreenState extends State<HeadmasterDashboardScreen> {
 
   Widget _buildStatCard(Color color, String value, String title, IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 28),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-                Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-              ],
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAcademicChart() {
-    return Container(
-      height: 380,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Grafik Akademik (Rata-rata Nilai per Tingkatan)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-          const SizedBox(height: 24),
-          Expanded(
-            child: Stack(
-              children: [
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(5, (index) => const Divider(color: Colors.black12)),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _buildMockBar(120, Colors.blue),
-                    _buildMockBar(150, Colors.blue),
-                    _buildMockBar(140, Colors.blue),
-                    _buildMockBar(160, Colors.blue),
-                    _buildMockBar(180, Colors.blue),
-                    _buildMockBar(190, Colors.blue),
-                  ],
-                ),
-                Center(child: Text('[ Grafik Dinamis Rata-rata Nilai ]', style: TextStyle(color: Colors.blue.withOpacity(0.4)))),
-              ],
-            ),
+          Icon(icon, color: color, size: 24),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(title, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+            ],
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildMockBar(double height, Color color) {
-    return Container(
-      width: 32,
-      height: height,
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.7),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-      ),
-    );
-  }
-
-  Widget _buildFinancialSummary() {
-    return Container(
-      height: 380,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Ringkasan Pemasukan & Tunggakan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-          const SizedBox(height: 24),
-          _financeRow('Pemasukan Bulan Ini', 'Rp 124.500.000', Colors.green),
-          const SizedBox(height: 16),
-          _financeRow('Tunggakan Siswa', 'Rp 12.000.000', Colors.redAccent),
-          const SizedBox(height: 16),
-          _financeRow('Dana Tabungan', 'Rp 340.000.000', Colors.blue),
-          const Spacer(),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(12)),
-            child: Column(
-              children: [
-                Text('Pencapaian Target SPP', style: TextStyle(color: Colors.indigo.shade700, fontWeight: FontWeight.bold, fontSize: 13)),
-                const SizedBox(height: 12),
-                LinearProgressIndicator(value: 0.85, backgroundColor: Colors.white, color: Colors.indigo.shade400, minHeight: 8, borderRadius: BorderRadius.circular(4)),
-                const SizedBox(height: 8),
-                Text('85% Terpenuhi', style: TextStyle(color: Colors.indigo.shade900, fontSize: 12, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _financeRow(String title, String value, Color indicatorColor) {
-    return Row(
-      children: [
-        Icon(Icons.circle, size: 10, color: indicatorColor),
-        const SizedBox(width: 8),
-        Expanded(child: Text(title, style: TextStyle(fontSize: 13, color: Colors.grey.shade600))),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2B3674))),
-      ],
     );
   }
 }

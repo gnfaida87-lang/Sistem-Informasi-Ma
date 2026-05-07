@@ -1,22 +1,15 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/network/d1_service.dart';
 import '../models/system_settings_model.dart';
-import '../../../core/utils/error_handler.dart';
 
 class SystemService {
-  final _supabase = Supabase.instance.client;
+  final _d1Service = D1Service();
 
   Future<SystemSettings> fetchSettings() async {
     try {
-      final response = await _supabase
-          .from('system_settings')
-          .select()
-          .eq('id', 1)
-          .maybeSingle();
+      final sql = "SELECT * FROM system_settings WHERE id = 1 LIMIT 1";
+      final results = await _d1Service.query(sql);
 
-      if (response == null) {
-        // Return default if not found
+      if (results.isEmpty) {
         return SystemSettings(
           schoolName: 'SI Madrasah',
           headmasterName: 'H. Ahmad Syaifuddin, M.Pd',
@@ -26,10 +19,9 @@ class SystemService {
           belajarAiEngine: 'Gemini (1.5 Pro)',
         );
       }
-      return SystemSettings.fromJson(response);
+      return SystemSettings.fromJson(results.first);
     } catch (e) {
-      final appError = handleSupabaseError(e);
-      logError(appError, context: 'fetchSettings');
+      print("Error fetchSettings: $e");
       return SystemSettings(
         schoolName: 'SI Madrasah',
         headmasterName: 'H. Ahmad Syaifuddin, M.Pd',
@@ -43,33 +35,32 @@ class SystemService {
 
   Future<void> updateSettings(SystemSettings settings) async {
     try {
-      await _supabase.from('system_settings').upsert({
-        'id': 1,
-        ...settings.toJson(),
-      });
+      final sql = """
+        INSERT INTO system_settings (id, school_name, headmaster_name, guru_ai_engine, belajar_ai_engine)
+        VALUES (1, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+        school_name = excluded.school_name,
+        headmaster_name = excluded.headmaster_name,
+        guru_ai_engine = excluded.guru_ai_engine,
+        belajar_ai_engine = excluded.belajar_ai_engine
+      """;
+      await _d1Service.query(sql, params: [
+        settings.schoolName,
+        settings.headmasterName,
+        settings.guruAiEngine,
+        settings.belajarAiEngine
+      ]);
     } catch (e) {
-      final appError = handleSupabaseError(e);
-      logError(appError, context: 'updateSettings');
-      throw appError;
+      print("Error updateSettings: $e");
+      rethrow;
     }
   }
 
-  Future<String?> uploadBrandingFile(String fileName, Uint8List fileBytes, String bucket) async {
-    try {
-      final path = 'branding/$fileName';
-      
-      await _supabase.storage.from(bucket).uploadBinary(
-        path,
-        fileBytes,
-        fileOptions: const FileOptions(upsert: true),
-      );
-
-      final String publicUrl = _supabase.storage.from(bucket).getPublicUrl(path);
-      return publicUrl;
-    } catch (e) {
-      final appError = handleSupabaseError(e);
-      logError(appError, context: 'uploadBrandingFile');
-      return null;
-    }
+  /// Catatan: Cloudflare D1 tidak punya Storage. 
+  /// Disarankan menggunakan Cloudflare R2 untuk upload logo/file.
+  Future<String?> uploadBrandingFile(String fileName, dynamic fileBytes, String bucket) async {
+    // Placeholder untuk integrasi R2 nantinya
+    print("Upload file $fileName ke $bucket belum dikonfigurasi untuk R2.");
+    return null;
   }
 }

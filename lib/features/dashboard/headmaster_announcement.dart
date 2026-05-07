@@ -1,18 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../announcement/models/announcement.dart';
 import '../announcement/services/announcement_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/providers/auth_provider.dart';
 import 'package:intl/intl.dart';
 
-class HeadmasterAnnouncement extends StatefulWidget {
+class HeadmasterAnnouncement extends ConsumerStatefulWidget {
   const HeadmasterAnnouncement({super.key});
 
   @override
-  State<HeadmasterAnnouncement> createState() => _HeadmasterAnnouncementState();
+  ConsumerState<HeadmasterAnnouncement> createState() => _HeadmasterAnnouncementState();
 }
 
-class _HeadmasterAnnouncementState extends State<HeadmasterAnnouncement> {
+class _HeadmasterAnnouncementState extends ConsumerState<HeadmasterAnnouncement> {
   final AnnouncementService _announcementService = AnnouncementService();
+  List<Announcement> _announcements = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAnnouncements();
+  }
+
+  Future<void> _loadAnnouncements() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await _announcementService.getAnnouncements();
+      setState(() {
+        _announcements = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,9 +57,9 @@ class _HeadmasterAnnouncementState extends State<HeadmasterAnnouncement> {
               ElevatedButton.icon(
                 onPressed: () => _showCreateAnnouncementDialog(context),
                 icon: const Icon(Icons.add_alert),
-                label: const Text('Buat Pengumuman Baru'),
+                label: const Text('Buat Pengumuman'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo.shade600,
+                  backgroundColor: const Color(0xFF2B3674),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -46,37 +68,26 @@ class _HeadmasterAnnouncementState extends State<HeadmasterAnnouncement> {
           ),
           const SizedBox(height: 24),
           
-          StreamBuilder<List<Announcement>>(
-            stream: _announcementService.streamAnnouncements(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              }
-              final announcements = snapshot.data ?? [];
-              if (announcements.isEmpty) {
-                return const Center(child: Text('Belum ada pengumuman.'));
-              }
-
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: MediaQuery.of(context).size.width > 800 ? 3 : (MediaQuery.of(context).size.width > 500 ? 2 : 1),
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.5,
-                ),
-                itemCount: announcements.length,
-                itemBuilder: (context, index) {
-                  final announcement = announcements[index];
-                  return _buildAnnouncementCard(announcement);
-                },
-              );
-            },
-          ),
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (_announcements.isEmpty)
+            const Center(child: Text('Belum ada pengumuman.'))
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: MediaQuery.of(context).size.width > 800 ? 3 : (MediaQuery.of(context).size.width > 500 ? 2 : 1),
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.5,
+              ),
+              itemCount: _announcements.length,
+              itemBuilder: (context, index) {
+                final announcement = _announcements[index];
+                return _buildAnnouncementCard(announcement);
+              },
+            ),
         ],
       ),
     );
@@ -89,30 +100,29 @@ class _HeadmasterAnnouncementState extends State<HeadmasterAnnouncement> {
     switch (announcement.targetRole) {
       case 'ALL':
         themeColor = Colors.orange;
-        targetText = 'Dikirim ke: Semua User';
+        targetText = 'Semua';
         break;
       case 'GM':
         themeColor = Colors.blue;
-        targetText = 'Dikirim ke: Guru';
+        targetText = 'Guru';
         break;
       case 'OT':
         themeColor = Colors.red;
-        targetText = 'Dikirim ke: Orang Tua';
+        targetText = 'Wali Murid';
         break;
       default:
         themeColor = Colors.grey;
-        targetText = 'Dikirim ke: ${announcement.targetRole}';
+        targetText = announcement.targetRole;
     }
 
-    final timeAgo = DateFormat('dd MMM yyyy').format(announcement.createdAt);
+    final dateStr = DateFormat('dd MMM yyyy').format(announcement.createdAt);
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: themeColor.withOpacity(0.3)),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,7 +135,7 @@ class _HeadmasterAnnouncementState extends State<HeadmasterAnnouncement> {
                 decoration: BoxDecoration(color: themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
                 child: Text(targetText, style: TextStyle(color: themeColor, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
-              Text(timeAgo, style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+              Text(dateStr, style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
             ],
           ),
           const SizedBox(height: 12),
@@ -161,7 +171,7 @@ class _HeadmasterAnnouncementState extends State<HeadmasterAnnouncement> {
                 children: [
                   TextField(
                     controller: titleController,
-                    decoration: const InputDecoration(labelText: 'Judul Pengumuman'),
+                    decoration: const InputDecoration(labelText: 'Judul'),
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -182,7 +192,7 @@ class _HeadmasterAnnouncementState extends State<HeadmasterAnnouncement> {
                         setDialogState(() => selectedTarget = value);
                       }
                     },
-                    decoration: const InputDecoration(labelText: 'Target User'),
+                    decoration: const InputDecoration(labelText: 'Target'),
                   ),
                 ],
               ),
@@ -193,15 +203,13 @@ class _HeadmasterAnnouncementState extends State<HeadmasterAnnouncement> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    if (titleController.text.isEmpty || contentController.text.isEmpty) {
-                      return;
-                    }
+                    if (titleController.text.isEmpty || contentController.text.isEmpty) return;
 
-                    final user = Supabase.instance.client.auth.currentUser;
+                    final user = ref.read(authProvider).user;
                     if (user == null) return;
 
                     final newAnnouncement = Announcement(
-                      id: '', // Will be generated by Supabase
+                      id: '', 
                       title: titleController.text,
                       content: contentController.text,
                       targetRole: selectedTarget,
@@ -213,16 +221,11 @@ class _HeadmasterAnnouncementState extends State<HeadmasterAnnouncement> {
 
                     if (success) {
                       if (context.mounted) Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Pengumuman berhasil dibuat')),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Gagal membuat pengumuman')),
-                      );
+                      _loadAnnouncements();
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pengumuman berhasil dibuat')));
                     }
                   },
-                  child: const Text('Simpan & Kirim'),
+                  child: const Text('Kirim'),
                 ),
               ],
             );
@@ -232,4 +235,3 @@ class _HeadmasterAnnouncementState extends State<HeadmasterAnnouncement> {
     );
   }
 }
-

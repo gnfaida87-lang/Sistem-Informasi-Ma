@@ -1,99 +1,65 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/network/d1_service.dart';
 import '../models/academic_models.dart';
-import '../../../core/utils/error_handler.dart';
 
 class AcademicService {
-  final _supabase = Supabase.instance.client;
+  final _d1Service = D1Service();
 
   Future<List<Semester>> getActiveSemesters() async {
     try {
-      final response = await _supabase
-          .from('semester')
-          .select('*, tahun_ajaran(tahun)')
-          .order('created_at', ascending: false)
-          .limit(20);
-      
-      if (response == null) return [];
-      final list = response as List;
-      return list.map((json) => Semester.fromJson(json as Map<String, dynamic>)).toList();
+      final sql = """
+        SELECT ay.*, ay.year_name as tahun
+        FROM academic_years ay
+        ORDER BY ay.id DESC
+        LIMIT 20
+      """;
+      final results = await _d1Service.query(sql);
+      return results.map((json) => Semester.fromJson(json as Map<String, dynamic>)).toList();
     } catch (e) {
-      final appError = handleSupabaseError(e);
-      logError(appError, context: 'getActiveSemesters');
-      return []; // Return empty list instead of throwing to prevent dashboard crash
+      print("Error getActiveSemesters: $e");
+      return [];
     }
   }
 
   Future<bool> validateSemester(String semesterId, String userId) async {
     try {
-      await _supabase.from('semester').update({
-        'is_validated': true,
-        'validated_by': userId,
-      }).eq('id', semesterId);
+      final sql = "UPDATE academic_years SET is_validated = 1, validated_by = ? WHERE id = ?";
+      await _d1Service.query(sql, params: [userId, semesterId]);
       return true;
     } catch (e) {
-      final appError = handleSupabaseError(e);
-      logError(appError, context: 'validateSemester');
-      throw appError;
-    }
-  }
-
-  Future<bool> validateAllActiveSemesters(String userId) async {
-    try {
-      await _supabase.from('semester').update({
-        'is_validated': true,
-        'validated_by': userId,
-      }).eq('is_active', true).eq('is_validated', false);
-      return true;
-    } catch (e) {
-      final appError = handleSupabaseError(e);
-      logError(appError, context: 'validateAllActiveSemesters');
-      throw appError;
+      print("Error validateSemester: $e");
+      return false;
     }
   }
 
   Future<List<Department>> getDepartments() async {
     try {
-      final response = await _supabase.from('jurusan')
-          .select()
-          .limit(10);
-      
-      if (response == null) return [];
-      final list = response as List;
-      return list.map((map) => Department.fromJson(map as Map<String, dynamic>)).toList();
+      final sql = "SELECT * FROM departments LIMIT 10";
+      final results = await _d1Service.query(sql);
+      return results.map((map) => Department.fromJson(map as Map<String, dynamic>)).toList();
     } catch (e) {
-      final appError = handleSupabaseError(e);
-      logError(appError, context: 'getDepartments');
+      print("Error getDepartments: $e");
       return [];
     }
   }
 
-  // ── INTEGRASI DATA MASTER ────────────────────────────────
-  
   Future<List<Map<String, dynamic>>> fetchStudentsForDropdown() async {
     try {
-      final response = await _supabase
-          .from('siswa')
-          .select('id, nis, nama, kelas_id')
-          .eq('status', 'aktif')
-          .order('nama');
-      return List<Map<String, dynamic>>.from(response);
+      final sql = "SELECT id, nis, name as nama, class_id as kelas_id FROM students WHERE is_active = 1 ORDER BY name";
+      final results = await _d1Service.query(sql);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchStudentsForDropdown');
+      print("Error fetchStudentsForDropdown: $e");
       return [];
     }
   }
 
   Future<List<Map<String, dynamic>>> fetchTeachersForDropdown() async {
     try {
-      final response = await _supabase
-          .from('guru')
-          .select('id, nip, nama')
-          .order('nama');
-      return List<Map<String, dynamic>>.from(response);
+      final sql = "SELECT id, nip, name as nama FROM teachers ORDER BY name";
+      final results = await _d1Service.query(sql);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchTeachersForDropdown');
+      print("Error fetchTeachersForDropdown: $e");
       return [];
     }
   }

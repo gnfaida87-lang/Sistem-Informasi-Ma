@@ -78,21 +78,16 @@ class ParentChildProfile {
     this.childNis,
   });
 
-  factory ParentChildProfile.fromSupabase(Map<String, dynamic> data) {
-    // Navigasi melalui join: orang_tua -> orang_tua_siswa -> siswa -> kelas -> guru (wali)
-    final student = data['orang_tua_siswa'][0]['siswa'];
-    final classroom = student['kelas'];
-    final teacher = classroom != null ? classroom['guru'] : null;
-
+  factory ParentChildProfile.fromMap(Map<String, dynamic> data) {
     return ParentChildProfile(
-      parentId: data['id'],
-      parentName: data['nama'],
-      childId: student['id'],
-      childName: student['nama'],
-      childNis: student['nis'],
-      classId: classroom != null ? classroom['id'] : '',
-      childClass: classroom != null ? classroom['nama'] : 'Belum ada kelas',
-      waliKelasName: teacher != null ? teacher['nama'] : 'Belum ditentukan',
+      parentId: data['id']?.toString() ?? '',
+      parentName: data['name'] ?? data['nama'] ?? '',
+      childId: data['student_id']?.toString() ?? '',
+      childName: data['student_name'] ?? '',
+      childClass: data['class_name'] ?? 'Belum ada kelas',
+      classId: data['class_id']?.toString() ?? '',
+      waliKelasName: data['teacher_name'] ?? 'Belum ditentukan',
+      childNis: data['nis'],
     );
   }
 }

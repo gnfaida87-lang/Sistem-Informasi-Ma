@@ -1,18 +1,14 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/network/d1_service.dart';
 import '../models/announcement.dart';
 
 class AnnouncementService {
-  final _supabase = Supabase.instance.client;
+  final _d1Service = D1Service();
 
   Future<List<Announcement>> getAnnouncements() async {
     try {
-      final response = await _supabase
-          .from('announcements')
-          .select()
-          .order('created_at', ascending: false);
-      
-      if (response == null) return [];
-      return (response as List).map((json) => Announcement.fromJson(json)).toList();
+      final sql = "SELECT * FROM announcements ORDER BY created_at DESC";
+      final results = await _d1Service.query(sql);
+      return results.map((json) => Announcement.fromJson(json)).toList();
     } catch (e) {
       print('Error fetching announcements: $e');
       return [];
@@ -21,23 +17,18 @@ class AnnouncementService {
 
   Future<bool> createAnnouncement(Announcement announcement) async {
     try {
-      await _supabase.from('announcements').insert(announcement.toJson());
+      final sql = "INSERT INTO announcements (id, title, content, target_role, created_at) VALUES (?, ?, ?, ?, ?)";
+      await _d1Service.query(sql, params: [
+        announcement.id,
+        announcement.title,
+        announcement.content,
+        announcement.targetRole,
+        DateTime.now().toIso8601String()
+      ]);
       return true;
     } catch (e) {
       print('Error creating announcement: $e');
       return false;
     }
   }
-
-  Stream<List<Announcement>> streamAnnouncements() {
-    return _supabase
-        .from('announcements')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false)
-        .map((data) {
-          if (data == null) return [];
-          return data.map((json) => Announcement.fromJson(json)).toList();
-        });
-  }
-
 }

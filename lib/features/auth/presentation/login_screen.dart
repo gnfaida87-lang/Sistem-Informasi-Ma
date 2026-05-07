@@ -1,91 +1,44 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_settings.dart';
 import '../../../core/router/app_router.dart';
-import '../services/auth_service.dart';
+import '../../../core/providers/auth_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  final _authService = AuthService();
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
   bool _isObscure = true; 
   final _formKey = GlobalKey<FormState>();
 
   Future<void> _handleLogin() async {
-    final identifier = _usernameController.text.trim().toLowerCase();
+    final identifier = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (identifier.isEmpty) {
-      _showError('Username tidak boleh kosong');
+    if (identifier.isEmpty || password.isEmpty) {
+      _showError('Username dan Password tidak boleh kosong');
       return;
     }
 
-    setState(() => _isLoading = true);
-
-    // ── MODE DEMO — hanya aktif saat debug, TIDAK masuk production ──
-    // ignore: do_not_use_environment
-    const bool isRelease = bool.fromEnvironment('dart.vm.product');
-    if (!isRelease) {
-      final mockRoles = {
-        'superadmin@madrasah.id': AppRoutes.superadmin,
-        'kamad@madrasah.id': AppRoutes.kepala,
-        'wakakur@madrasah.id': AppRoutes.wakakur,
-        'operator@madrasah.id': AppRoutes.operator_,
-        'keuangan@madrasah.id': AppRoutes.keuangan,
-        'guru@madrasah.id': AppRoutes.guru,
-        'bimbel@madrasah.id': AppRoutes.bimbel,
-        'ortu@madrasah.id': AppRoutes.orangTua,
-      };
-      if (mockRoles.containsKey(identifier)) {
-        await Future.delayed(const Duration(milliseconds: 800));
-        if (!mounted) return;
-        context.go(mockRoles[identifier]!);
-        setState(() => _isLoading = false);
-        return;
-      }
-    }
-    // ─────────────────────────────────────────────────────────────
-
-    try {
-      final response = await _authService.signIn(identifier, password);
-      final user = response.user;
-      
-      if (user != null) {
-        final roleCode = await _authService.getUserRole(user.id);
-        if (!mounted) return;
-
-        switch (roleCode) {
-          case 'SA': context.go(AppRoutes.superadmin); break;
-          case 'KM': context.go(AppRoutes.kepala); break;
-          case 'WK': context.go(AppRoutes.wakakur); break;
-          case 'OP': context.go(AppRoutes.operator_); break;
-          case 'AK': context.go(AppRoutes.keuangan); break;
-          case 'GM':
-            context.go(AppRoutes.guru);
-            break;
-          case 'GB': context.go(AppRoutes.bimbel); break;
-          case 'OT': context.go(AppRoutes.orangTua); break;
-          default:
-            _showError('Role tidak dikenali atau akses ditolak');
-            await _authService.signOut();
-        }
-      }
-    } on AuthException catch (e) {
-      _showError(e.message);
-    } catch (e) {
-      _showError('Terjadi kesalahan: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    // Panggil provider untuk login
+    await ref.read(authProvider.notifier).signIn(identifier, password);
+    
+    final authState = ref.read(authProvider);
+    
+    if (authState.user != null) {
+      if (!mounted) return;
+      // Navigasi berdasarkan role dari AppUser
+      final role = authState.user!.roleCode;
+      context.go(AppRoutes.dashboardForRole(role));
+    } else if (authState.errorMessage != null) {
+      _showError(authState.errorMessage!);
     }
   }
 
@@ -106,12 +59,8 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // Responsive sizing helper
   _ResponsiveSizes _getResponsiveSizes(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    
-    // Breakpoint definitions
     bool isMobile = screenWidth < 600;
     bool isTablet = screenWidth >= 600 && screenWidth < 1024;
     bool isDesktop = screenWidth >= 1024;
@@ -145,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final sizes = _getResponsiveSizes(context);
-    final isMobile = sizes.isMobile;
+    final authState = ref.watch(authProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FE),
@@ -153,55 +102,44 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Center(
           child: SingleChildScrollView(
             padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 0 : 24,
-              vertical: isMobile ? 0 : 40,
+              horizontal: sizes.isMobile ? 0 : 24,
+              vertical: sizes.isMobile ? 0 : 40,
             ),
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: sizes.cardMaxWidth,
-                minHeight: MediaQuery.of(context).size.height - 
-                  (isMobile ? 0 : 80),
               ),
-              child: IntrinsicHeight(
-                child: Container(
-                  width: double.infinity,
-                  margin: sizes.cardMargin,
-                  padding: sizes.cardPadding,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(sizes.borderRadius),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        blurRadius: isMobile ? 10 : 20,
-                        offset: Offset(0, isMobile ? 5 : 10),
-                      )
+              child: Container(
+                width: double.infinity,
+                margin: sizes.cardMargin,
+                padding: sizes.cardPadding,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(sizes.borderRadius),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      blurRadius: sizes.isMobile ? 10 : 20,
+                      offset: Offset(0, sizes.isMobile ? 5 : 10),
+                    )
+                  ],
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildLogo(sizes),
+                      SizedBox(height: sizes.spacing),
+                      _buildWelcomeText(sizes),
+                      SizedBox(height: sizes.extraLargeSpacing),
+                      _buildUsernameInput(sizes),
+                      SizedBox(height: sizes.spacing),
+                      _buildPasswordInput(sizes),
+                      SizedBox(height: sizes.largeSpacing),
+                      _buildLoginButton(sizes, authState.isLoading),
                     ],
-                  ),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // LOGO SEKOLAH
-                        _buildLogo(sizes),
-                        SizedBox(height: sizes.spacing),
-
-                        // TEKS SAMBUTAN
-                        _buildWelcomeText(sizes),
-                        SizedBox(height: sizes.extraLargeSpacing),
-
-                        // FORM INPUT
-                        _buildUsernameInput(sizes),
-                        SizedBox(height: sizes.spacing),
-                        _buildPasswordInput(sizes),
-                        SizedBox(height: sizes.largeSpacing),
-
-                        // TOMBOL MASUK
-                        _buildLoginButton(sizes),
-                      ],
-                    ),
                   ),
                 ),
               ),
@@ -225,12 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.school_outlined,
-              size: sizes.logoIconSize,
-              color: Colors.blue.shade400,
-            ),
-            SizedBox(height: 2),
+            Icon(Icons.school_outlined, size: sizes.logoIconSize, color: Colors.blue.shade400),
             Text(
               appConfig.schoolName,
               textAlign: TextAlign.center,
@@ -238,7 +171,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 fontSize: sizes.logoTextSize,
                 color: Colors.blue.shade400,
                 fontWeight: FontWeight.bold,
-                height: 1.2,
               ),
             ),
           ],
@@ -257,10 +189,8 @@ class _LoginScreenState extends State<LoginScreen> {
             fontSize: sizes.titleFontSize,
             fontWeight: FontWeight.bold,
             color: const Color(0xFF2B3674),
-            height: 1.3,
           ),
         ),
-        SizedBox(height: sizes.spacing / 2),
         Text(
           'Silakan masuk menggunakan akun Anda',
           textAlign: TextAlign.center,
@@ -274,114 +204,51 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildUsernameInput(_ResponsiveSizes sizes) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(sizes.inputBorderRadius),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: TextField(
-        controller: _usernameController,
-        textInputAction: TextInputAction.next,
-        style: TextStyle(fontSize: sizes.inputFontSize),
-        decoration: InputDecoration(
-          hintText: 'Username',
-          hintStyle: TextStyle(
-            color: Colors.grey.shade400,
-            fontSize: sizes.inputFontSize,
-          ),
-          prefixIcon: Icon(Icons.person_outline, color: Colors.grey.shade400),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: sizes.isMobile ? 12 : 16,
-            vertical: sizes.isMobile ? 12 : 16,
-          ),
-        ),
-        onSubmitted: (_) => _handleLogin(),
+    return TextField(
+      controller: _usernameController,
+      decoration: InputDecoration(
+        hintText: 'Username',
+        prefixIcon: const Icon(Icons.person_outline),
+        filled: true,
+        fillColor: Colors.grey.shade50,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(sizes.inputBorderRadius)),
       ),
     );
   }
 
   Widget _buildPasswordInput(_ResponsiveSizes sizes) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(sizes.inputBorderRadius),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: TextField(
-        controller: _passwordController,
-        obscureText: _isObscure,
-        textInputAction: TextInputAction.done,
-        style: TextStyle(fontSize: sizes.inputFontSize),
-        decoration: InputDecoration(
-          hintText: 'Password',
-          hintStyle: TextStyle(
-            color: Colors.grey.shade400,
-            fontSize: sizes.inputFontSize,
-          ),
-          prefixIcon: Icon(Icons.lock_outline, color: Colors.grey.shade400),
-          suffixIcon: IconButton(
-            icon: Icon(
-              _isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              color: _isObscure ? Colors.grey.shade400 : Colors.blue.shade600,
-            ),
-            onPressed: () {
-              setState(() {
-                _isObscure = !_isObscure;
-              });
-            },
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(
-              minWidth: 40,
-              minHeight: 40,
-            ),
-          ),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: sizes.isMobile ? 12 : 16,
-            vertical: sizes.isMobile ? 12 : 16,
-          ),
+    return TextField(
+      controller: _passwordController,
+      obscureText: _isObscure,
+      decoration: InputDecoration(
+        hintText: 'Password',
+        prefixIcon: const Icon(Icons.lock_outline),
+        suffixIcon: IconButton(
+          icon: Icon(_isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+          onPressed: () => setState(() => _isObscure = !_isObscure),
         ),
-        onSubmitted: (_) => _handleLogin(),
+        filled: true,
+        fillColor: Colors.grey.shade50,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(sizes.inputBorderRadius)),
       ),
     );
   }
 
-  Widget _buildLoginButton(_ResponsiveSizes sizes) {
+  Widget _buildLoginButton(_ResponsiveSizes sizes, bool isLoading) {
     return ElevatedButton(
-      onPressed: _isLoading ? null : _handleLogin,
+      onPressed: isLoading ? null : _handleLogin,
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.indigo.shade600,
-        foregroundColor: Colors.white,
         padding: EdgeInsets.symmetric(vertical: sizes.buttonPadding),
-        elevation: 2,
-        shadowColor: Colors.indigo.withOpacity(0.3),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(sizes.inputBorderRadius),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(sizes.inputBorderRadius)),
       ),
-      child: _isLoading 
-        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-        : Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.login_rounded, size: sizes.buttonFontSize),
-              const SizedBox(width: 8),
-              Text(
-                'Masuk',
-                style: TextStyle(
-                  fontSize: sizes.buttonFontSize,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
+      child: isLoading 
+        ? const CircularProgressIndicator(color: Colors.white)
+        : const Text('Masuk', style: TextStyle(fontWeight: FontWeight.bold)),
     );
   }
 }
 
-// Helper class untuk responsive sizing
 class _ResponsiveSizes {
   final bool isMobile;
   final bool isTablet;

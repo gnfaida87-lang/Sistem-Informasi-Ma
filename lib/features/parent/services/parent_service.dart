@@ -1,26 +1,30 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/network/d1_service.dart';
 import '../models/parent_models.dart';
-import '../../../core/utils/error_handler.dart';
 
 class ParentService {
-  final _supabase = Supabase.instance.client;
+  final _d1Service = D1Service();
 
   /// Mengambil profil orang tua beserta data anak
   Future<ParentChildProfile?> getParentDashboardProfile(String userId) async {
     try {
-      final response = await _supabase
-          .from('orang_tua')
-          .select('*, orang_tua_siswa(siswa(*, kelas(*, guru(nama))))')
-          .eq('user_id', userId)
-          .maybeSingle();
+      final sql = """
+        SELECT p.*, s.id as student_id, s.name as student_name, c.name as class_name, t.name as teacher_name
+        FROM parents p
+        JOIN student_parents sp ON p.id = sp.parent_id
+        JOIN students s ON sp.student_id = s.id
+        JOIN classes c ON s.class_id = c.id
+        LEFT JOIN teachers t ON c.teacher_id = t.id
+        WHERE p.user_id = ?
+        LIMIT 1
+      """;
+      final results = await _d1Service.query(sql, params: [userId]);
 
-      if (response != null && response['orang_tua_siswa'] != null && (response['orang_tua_siswa'] as List).isNotEmpty) {
-        return ParentChildProfile.fromSupabase(response);
+      if (results.isNotEmpty) {
+        return ParentChildProfile.fromMap(results.first);
       }
       return null;
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'getParentDashboardProfile');
+      print("Error getParentDashboardProfile: $e");
       return null;
     }
   }
@@ -29,18 +33,15 @@ class ParentService {
   Future<ChildAttendanceSummary?> getChildAttendanceToday(String studentId) async {
     try {
       final today = DateTime.now().toIso8601String().split('T')[0];
-      final response = await _supabase
-          .from('absensi')
-          .select('*')
-          .eq('siswa_id', studentId)
-          .eq('tanggal', today)
-          .maybeSingle();
+      final sql = "SELECT * FROM attendance WHERE student_id = ? AND date = ? LIMIT 1";
+      final results = await _d1Service.query(sql, params: [studentId, today]);
 
-      if (response != null) {
+      if (results.isNotEmpty) {
+        final data = results.first;
         return ChildAttendanceSummary(
-          status: response['status']?.toUpperCase() ?? 'HADIR',
-          time: response['jam_masuk'] ?? '--:--',
-          date: DateTime.parse(response['tanggal']),
+          status: data['status']?.toString().toUpperCase() ?? 'HADIR',
+          time: data['check_in_time'] ?? '--:--',
+          date: DateTime.parse(data['date']),
         );
       }
       return null;
@@ -52,13 +53,15 @@ class ParentService {
   /// Mengambil riwayat nilai akademik anak
   Future<List<Map<String, dynamic>>> getStudentGrades(String studentId) async {
     try {
-      final response = await _supabase
-          .from('nilai')
-          .select('*, mapel(nama)')
-          .eq('siswa_id', studentId)
-          .order('created_at', ascending: false);
-      
-      return List<Map<String, dynamic>>.from(response);
+      final sql = """
+        SELECT sg.*, sub.name as mapel_nama
+        FROM student_grades sg
+        JOIN subjects sub ON sg.subject_id = sub.id
+        WHERE sg.student_id = ?
+        ORDER BY sg.created_at DESC
+      """;
+      final results = await _d1Service.query(sql, params: [studentId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
       return [];
     }
@@ -67,13 +70,15 @@ class ParentService {
   /// Mengambil program bimbel yang diikuti anak
   Future<List<Map<String, dynamic>>> getStudentBimbelPrograms(String studentId) async {
     try {
-      final response = await _supabase
-          .from('peserta_bimbel')
-          .select('*, program_bimbel(*, guru(nama))')
-          .eq('siswa_id', studentId)
-          .eq('status', 'active');
-      
-      return List<Map<String, dynamic>>.from(response);
+      final sql = """
+        SELECT bp.*, bprog.name as program_name, t.name as teacher_name
+        FROM bimbel_participants bp
+        JOIN bimbel_programs bprog ON bp.program_id = bprog.id
+        JOIN teachers t ON bprog.teacher_id = t.id
+        WHERE bp.student_id = ? AND bp.status = 'active'
+      """;
+      final results = await _d1Service.query(sql, params: [studentId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
       return [];
     }
@@ -82,14 +87,13 @@ class ParentService {
   /// Mengambil data keuangan anak (Tagihan SPP)
   Future<List<Map<String, dynamic>>> getStudentFinances(String studentId) async {
     try {
-      final response = await _supabase
-          .from('pembayaran_spp')
-          .select('*')
-          .eq('siswa_id', studentId)
-          .eq('status', 'belum_lunas')
-          .order('bulan', ascending: true);
-      
-      return List<Map<String, dynamic>>.from(response);
+      final sql = """
+        SELECT * FROM spp_records 
+        WHERE student_id = ? AND status = 'belum_lunas'
+        ORDER BY year ASC, month ASC
+      """;
+      final results = await _d1Service.query(sql, params: [studentId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
       return [];
     }
@@ -98,50 +102,42 @@ class ParentService {
   /// Mengambil saldo tabungan anak
   Future<double> getStudentSavings(String studentId) async {
     try {
-      final response = await _supabase
-          .from('tabungan_siswa')
-          .select('saldo')
-          .eq('siswa_id', studentId)
-          .maybeSingle();
-      
-      return (response?['saldo'] as num?)?.toDouble() ?? 0.0;
+      final sql = "SELECT SUM(CASE WHEN type = 'setor' THEN amount ELSE -amount END) as balance FROM savings WHERE student_id = ?";
+      final results = await _d1Service.query(sql, params: [studentId]);
+      return (results.first['balance'] ?? 0).toDouble();
     } catch (e) {
       return 0.0;
     }
   }
 
-  /// Mengambil jadwal pelajaran anak (Sinkron dengan Wakakur)
+  /// Mengambil jadwal pelajaran anak
   Future<List<Map<String, dynamic>>> fetchChildSchedule(String studentId) async {
     try {
-      // Ambil kelas_id siswa terlebih dahulu
-      final studentRes = await _supabase
-          .from('siswa')
-          .select('kelas_id')
-          .eq('id', studentId)
-          .single();
-      
-      final classId = studentRes['kelas_id'];
-
-      // Ambil jadwal berdasarkan kelas tersebut
-      final response = await _supabase
-          .from('jadwal_pelajaran')
-          .select('*, mapel(nama), guru(nama), jam_pelajaran(*)')
-          .eq('kelas_id', classId);
-      
-      return List<Map<String, dynamic>>.from(response);
+      final sql = """
+        SELECT ts.*, s.name as subject_name, t.name as teacher_name, slot.start_time, slot.end_time
+        FROM teaching_schedules ts
+        JOIN students stu ON ts.class_id = stu.class_id
+        JOIN subjects s ON ts.subject_id = s.id
+        JOIN teachers t ON ts.teacher_id = t.id
+        JOIN time_slots slot ON ts.time_slot_id = slot.id
+        WHERE stu.id = ?
+      """;
+      final results = await _d1Service.query(sql, params: [studentId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchChildSchedule');
+      print("Error fetchChildSchedule: $e");
       return [];
     }
   }
 
-  /// Real-time: Pengumuman baru langsung muncul (Kepala Sekolah -> Ortu)
-  Stream<List<Map<String, dynamic>>> streamAnnouncements() {
-    return _supabase
-        .from('pengumuman')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false)
-        .map((data) => data.where((e) => e['target_role'] == 'all' || e['target_role'] == 'orang_tua').toList());
+  /// Pengumuman (Kepala Sekolah -> Ortu)
+  Future<List<Map<String, dynamic>>> getAnnouncements() async {
+    try {
+      final sql = "SELECT * FROM announcements WHERE target_role IN ('all', 'orang_tua') ORDER BY created_at DESC";
+      final results = await _d1Service.query(sql);
+      return List<Map<String, dynamic>>.from(results);
+    } catch (e) {
+      return [];
+    }
   }
 }

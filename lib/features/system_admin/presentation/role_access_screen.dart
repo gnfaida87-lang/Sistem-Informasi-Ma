@@ -70,7 +70,7 @@ class _RoleAccessScreenState extends State<RoleAccessScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Perhatian: Mapping ini secara otomatis akan direplikasi pada Rule Row Level Security (RLS) di Supabase. Role "Wali Kelas" tidak masuk konfigurasi ini karena berstatus Flag pada Guru.',
+                    'Perhatian: Mapping ini secara otomatis akan direplikasi pada kontrol akses di Cloudflare D1. Role "Wali Kelas" tidak masuk konfigurasi ini karena berstatus Flag pada Guru.',
                     style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
                   ),
                 ],
@@ -153,10 +153,10 @@ class _RoleAccessScreenState extends State<RoleAccessScreen> {
                   ),
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Konfigurasi RLS & Routing Role Berhasil Disimpan (Mock)')),
+                      const SnackBar(content: Text('Konfigurasi Akses & Routing Role Berhasil Disimpan ke D1 (Mock)')),
                     );
                   },
-                  child: const Text('Simpan & Sinkronisasi RLS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: const Text('Simpan & Sinkronisasi Akses', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ),

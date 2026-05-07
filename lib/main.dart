@@ -2,21 +2,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
-import 'core/network/supabase_config.dart';
-import 'core/network/supabase_service.dart';
+import 'core/network/d1_config.dart';
+import 'core/network/d1_service.dart';
 import 'injection.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Cek konfigurasi Supabase sebelum initialize
-  if (!SupabaseConfig.isConfigured) {
+  // Cek konfigurasi D1 sebelum jalankan app
+  if (!D1Config.isConfigured) {
     runApp(const _ConfigErrorApp());
     return;
   }
-
-  // Inisialisasi Supabase
-  await SupabaseService.initialize();
 
   // Inisiasi dependency tambahan
   await setupInjection();
@@ -28,7 +25,7 @@ void main() async {
   );
 }
 
-/// Tampil error screen jika supabase_config.dart belum diisi
+/// Tampil error screen jika d1_config.dart belum diisi
 class _ConfigErrorApp extends StatelessWidget {
   const _ConfigErrorApp();
 
@@ -48,7 +45,7 @@ class _ConfigErrorApp extends StatelessWidget {
                     size: 72, color: Colors.red.shade300),
                 const SizedBox(height: 24),
                 const Text(
-                  'Konfigurasi Supabase Belum Diisi',
+                  'Konfigurasi Cloudflare D1 Belum Diisi',
                   style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -57,8 +54,8 @@ class _ConfigErrorApp extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Buka lib/core/network/supabase_config.dart\n'
-                  'dan isi url serta anonKey dari dashboard Supabase Anda.',
+                  'Buka lib/core/network/d1_config.dart\n'
+                  'dan isi baseUrl dari dashboard Cloudflare Worker Anda.',
                   style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                   textAlign: TextAlign.center,
                 ),
@@ -72,9 +69,8 @@ class _ConfigErrorApp extends StatelessWidget {
                       border: Border.all(color: Colors.orange.shade200),
                     ),
                     child: const Text(
-                      'DEBUG: Atau jalankan dengan:\n'
-                      'flutter run --dart-define=SUPABASE_URL=https://xxx.supabase.co '
-                      '--dart-define=SUPABASE_ANON_KEY=eyJ...',
+                      'DEBUG: Pastikan baseUrl di d1_config.dart sudah benar\n'
+                      'agar aplikasi dapat terhubung ke Worker D1.',
                       style: TextStyle(fontSize: 12, fontFamily: 'monospace'),
                     ),
                   ),

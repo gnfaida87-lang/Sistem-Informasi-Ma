@@ -1,12 +1,11 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_settings.dart';
 import '../../../core/providers/system_provider.dart';
 import '../../../core/mixins/safe_async_mixin.dart';
 import '../../../core/utils/context_extensions.dart';
+import '../../../core/network/d1_service.dart';
 import '../models/system_settings_model.dart';
 
 class AppSettingsScreen extends ConsumerStatefulWidget {
@@ -20,7 +19,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
   final _schoolNameController = TextEditingController();
   final _headmasterNameController = TextEditingController();
   
-  // Password controllers
   final _oldPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -29,7 +27,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
   bool _isNewPasswordObscure = true;
   bool _isConfirmPasswordObscure = true;
 
-  int _selectedSubMenu = 0; // 0: Umum, 1: Ubah Password
+  int _selectedSubMenu = 0; 
   
   String? _logoUrl;
   String? _faviconUrl;
@@ -37,7 +35,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
   @override
   void initState() {
     super.initState();
-    // Initialize controllers with current values
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
     });
@@ -66,35 +63,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
   }
 
   Future<void> _pickAndUpload(bool isLogo) async {
-    // In some versions of file_picker, it's pickFiles directly on the class
-    final result = await FilePicker.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
-
-    if (result != null && result.files.first.bytes != null) {
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${result.files.first.name}';
-      final fileBytes = result.files.first.bytes!;
-
-      await safeCall(
-        context: context,
-        action: () async {
-          final service = ref.read(systemServiceProvider);
-          final url = await service.uploadBrandingFile(fileName, fileBytes, 'branding');
-          
-          if (url != null) {
-            setState(() {
-              if (isLogo) {
-                _logoUrl = url;
-              } else {
-                _faviconUrl = url;
-              }
-            });
-          }
-        },
-        successMessage: 'File berhasil diunggah!',
-      );
-    }
+    // Note: Cloudflare D1 doesn't have Storage. R2 integration needed.
+    context.showErrorSnackBar('Upload file (R2) akan segera dikonfigurasi.');
   }
 
   Future<void> _saveGeneralSettings() async {
@@ -114,13 +84,11 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
         final service = ref.read(systemServiceProvider);
         await service.updateSettings(settings);
         
-        // Update local appConfig for instant feedback across the app
         appConfig.schoolName = settings.schoolName;
         appConfig.headmasterName = settings.headmasterName;
         appConfig.logoPath = settings.logoUrl ?? "";
         appConfig.iconPath = settings.faviconUrl ?? "";
         
-        // Refresh provider
         ref.invalidate(systemSettingsProvider);
       },
       successMessage: 'Pengaturan berhasil disimpan!',
@@ -136,7 +104,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Sub-sidebar for Settings
           Container(
             width: 200,
             decoration: BoxDecoration(
@@ -164,7 +131,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
             ),
           ),
           
-          // Main Settings Content
           Expanded(
             child: settingsAsync.when(
               data: (settings) => SingleChildScrollView(
@@ -184,7 +150,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
                     Text(
                       _selectedSubMenu == 0 
                         ? 'Kelola informasi sekolah dan identitas visual sistem.' 
-                        : 'Perbarui kata sandi akun administrator Anda secara berkala.',
+                        : 'Perbarui kata sandi akun administrator Anda.',
                       style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                     ),
                     const SizedBox(height: 32),
@@ -258,44 +224,15 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
           title: 'Identitas Sekolah',
           children: [
             _buildTextField(
-              label: 'Nama Sekolah (Sync SI Madrasah)',
+              label: 'Nama Sekolah',
               controller: _schoolNameController,
               hint: 'Masukkan nama resmi sekolah',
             ),
             const SizedBox(height: 24),
             _buildTextField(
-              label: 'Nama Kepala Sekolah (Sync Rapot)',
+              label: 'Nama Kepala Sekolah',
               controller: _headmasterNameController,
-              hint: 'Masukkan nama lengkap beserta gelar',
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        _buildSectionCard(
-          title: 'Visual & Branding',
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: _buildImageUploadTile(
-                    label: 'Logo Utama (Login)',
-                    description: 'Akan tampil pada halaman masuk sistem.',
-                    icon: Icons.business,
-                    imageUrl: _logoUrl,
-                    onUpload: () => _pickAndUpload(true),
-                  ),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: _buildImageUploadTile(
-                    label: 'Ikon Sistem (Favicon)',
-                    description: 'Akan tampil pada sidebar dan tab browser.',
-                    icon: Icons.grid_view_rounded,
-                    imageUrl: _faviconUrl,
-                    onUpload: () => _pickAndUpload(false),
-                  ),
-                ),
-              ],
+              hint: 'Masukkan nama lengkap',
             ),
           ],
         ),
@@ -314,17 +251,9 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
           title: 'Kredensial Akun',
           children: [
             _buildTextField(
-              label: 'Password Lama',
-              controller: _oldPasswordController,
-              hint: 'Masukkan password saat ini',
-              isObscure: _isOldPasswordObscure,
-              onObscureToggle: () => setState(() => _isOldPasswordObscure = !_isOldPasswordObscure),
-            ),
-            const SizedBox(height: 24),
-            _buildTextField(
               label: 'Password Baru',
               controller: _newPasswordController,
-              hint: 'Masukkan password baru minimal 8 karakter',
+              hint: 'Minimal 8 karakter',
               isObscure: _isNewPasswordObscure,
               onObscureToggle: () => setState(() => _isNewPasswordObscure = !_isNewPasswordObscure),
             ),
@@ -332,7 +261,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
             _buildTextField(
               label: 'Konfirmasi Password Baru',
               controller: _confirmPasswordController,
-              hint: 'Ulangi password baru Anda',
+              hint: 'Ulangi password baru',
               isObscure: _isConfirmPasswordObscure,
               onObscureToggle: () => setState(() => _isConfirmPasswordObscure = !_isConfirmPasswordObscure),
             ),
@@ -417,66 +346,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
     );
   }
 
-  Widget _buildImageUploadTile({
-    required String label, 
-    required String description, 
-    required IconData icon,
-    String? imageUrl,
-    VoidCallback? onUpload,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade300),
-              image: imageUrl != null && imageUrl.isNotEmpty
-                ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover)
-                : null,
-            ),
-            child: imageUrl == null || imageUrl.isEmpty 
-              ? Icon(icon, color: Colors.orange.shade300, size: 30)
-              : null,
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                const SizedBox(height: 4),
-                Text(description, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          ElevatedButton(
-            onPressed: onUpload,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
-              elevation: 0,
-              side: BorderSide(color: Colors.grey.shade300),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: const Text('Upload', style: TextStyle(fontSize: 12)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSaveButton() {
     return SizedBox(
       width: 200,
@@ -522,9 +391,13 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> with Safe
     await safeCall(
       context: context,
       action: () async {
-        // Update user password in Supabase Auth
-        await Supabase.instance.client.auth.updateUser(
-          UserAttributes(password: _newPasswordController.text),
+        final d1Service = D1Service();
+        final userId = ref.read(authProvider).user?.id;
+        if (userId == null) throw 'User tidak ditemukan';
+        
+        await d1Service.query(
+          "UPDATE users SET password_hash = ? WHERE id = ?",
+          params: [_newPasswordController.text, userId],
         );
         
         _oldPasswordController.clear();

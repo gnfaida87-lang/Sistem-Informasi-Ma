@@ -1,150 +1,87 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/network/d1_service.dart';
 import '../models/scheduling_models.dart';
 import '../models/school_models.dart';
 import '../../../shared/models/guru.dart';
-import '../../../core/utils/error_handler.dart';
 
 class ScheduleService {
-  final _supabase = Supabase.instance.client;
+  final _d1Service = D1Service();
 
-  /// Mengambil jam pelajaran berdasarkan hari (Data dari Operator)
   Future<List<TimeSlot>> getTimeSlots(String day) async {
     try {
-      final response = await _supabase
-          .from('jam_pelajaran')
-          .select()
-          .eq('hari', day)
-          .order('waktu_mulai', ascending: true);
-      
-      return (response as List).map((json) => TimeSlot.fromJson(json)).toList();
+      final sql = "SELECT * FROM time_slots WHERE day = ? ORDER BY start_time ASC";
+      final results = await _d1Service.query(sql, params: [day]);
+      return results.map((json) => TimeSlot.fromJson(json)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'getTimeSlots');
+      print("Error getTimeSlots: $e");
       return [];
     }
   }
 
-  /// Mengambil semua guru aktif (Data Master Operator)
   Future<List<Guru>> getAllTeachers() async {
     try {
-      final response = await _supabase
-          .from('guru')
-          .select('*, users(username)')
-          .order('nama');
-      return (response as List).map((json) => Guru.fromJson(json)).toList();
+      final sql = "SELECT * FROM teachers ORDER BY name";
+      final results = await _d1Service.query(sql);
+      return results.map((json) => Guru.fromJson(json)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'getAllTeachers');
+      print("Error getAllTeachers: $e");
       return [];
     }
   }
 
-  /// Mengambil semua mata pelajaran (Data Master Operator)
   Future<List<Mapel>> getAllSubjects() async {
     try {
-      final response = await _supabase
-          .from('mapel')
-          .select()
-          .order('nama');
-      return (response as List).map((json) => Mapel.fromJson(json)).toList();
+      final sql = "SELECT * FROM subjects ORDER BY name";
+      final results = await _d1Service.query(sql);
+      return results.map((json) => Mapel.fromJson(json)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'getAllSubjects');
+      print("Error getAllSubjects: $e");
       return [];
     }
   }
 
-  /// Mengambil kelas berdasarkan level (Data Master Operator)
   Future<List<Kelas>> getClassesByLevel(String level) async {
     try {
-      final response = await _supabase
-          .from('kelas')
-          .select('*, guru(nama)')
-          .ilike('nama', '$level%')
-          .order('nama', ascending: true);
-      
-      return (response as List).map((json) => Kelas.fromJson(json)).toList();
+      final sql = "SELECT c.*, t.name as wali_nama FROM classes c LEFT JOIN teachers t ON c.teacher_id = t.id WHERE c.name LIKE ? ORDER BY c.name ASC";
+      final results = await _d1Service.query(sql, params: ["$level%"]);
+      return results.map((json) => Kelas.fromJson(json)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'getClassesByLevel');
+      print("Error getClassesByLevel: $e");
       return [];
     }
   }
 
   Future<List<ScheduleRow>> getTeacherSchedules(String teacherId, String semesterId) async {
     try {
-      final response = await _supabase
-          .from('jadwal_pelajaran')
-          .select('*, jam_pelajaran(*), kelas(nama), mapel(nama)')
-          .eq('guru_id', teacherId)
-          .eq('semester_id', semesterId);
-      
-      return (response as List).map((json) => ScheduleRow.fromJson(json)).toList();
+      final sql = """
+        SELECT ts.*, t.start_time, t.end_time, t.day, c.name as class_name, s.name as subject_name
+        FROM teaching_schedules ts
+        JOIN time_slots t ON ts.time_slot_id = t.id
+        JOIN classes c ON ts.class_id = c.id
+        JOIN subjects s ON ts.subject_id = s.id
+        WHERE ts.teacher_id = ? AND ts.academic_year_id = ?
+      """;
+      final results = await _d1Service.query(sql, params: [teacherId, semesterId]);
+      return results.map((json) => ScheduleRow.fromJson(json)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'getTeacherSchedules');
-      return [];
-    }
-  }
-
-  Future<List<ScheduleRow>> getClassSchedules(String classId, String semesterId) async {
-    try {
-      final response = await _supabase
-          .from('jadwal_pelajaran')
-          .select('*, jam_pelajaran(*), guru(nama), mapel(nama)')
-          .eq('kelas_id', classId)
-          .eq('semester_id', semesterId);
-      
-      return (response as List).map((json) => ScheduleRow.fromJson(json)).toList();
-    } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'getClassSchedules');
-      return [];
-    }
-  }
-
-  Future<List<ScheduleRow>> getSchedules(String semesterId, List<String> classIds, String day) async {
-    try {
-      final response = await _supabase
-          .from('jadwal_pelajaran')
-          .select('*, guru(nama), mapel(nama), jam_pelajaran(*)')
-          .eq('semester_id', semesterId)
-          .inFilter('kelas_id', classIds)
-          .eq('jam_pelajaran.hari', day);
-      
-      return (response as List).map((json) => ScheduleRow.fromJson(json)).toList();
-    } catch (e) {
+      print("Error getTeacherSchedules: $e");
       return [];
     }
   }
 
   Future<bool> saveSchedule(String semesterId, String classId, String timeSlotId, String teacherId, String subjectId) async {
     try {
-      await _supabase.from('jadwal_pelajaran').upsert({
-        'semester_id': semesterId,
-        'kelas_id': classId,
-        'jam_pelajaran_id': timeSlotId,
-        'guru_id': teacherId,
-        'mapel_id': subjectId,
-      }, onConflict: 'semester_id, kelas_id, jam_pelajaran_id');
+      final sql = """
+        INSERT INTO teaching_schedules (id, academic_year_id, class_id, time_slot_id, teacher_id, subject_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(academic_year_id, class_id, time_slot_id) DO UPDATE SET
+        teacher_id = excluded.teacher_id,
+        subject_id = excluded.subject_id
+      """;
+      final id = "${semesterId}_${classId}_${timeSlotId}";
+      await _d1Service.query(sql, params: [id, semesterId, classId, timeSlotId, teacherId, subjectId]);
       return true;
     } catch (e) {
-      return false;
-    }
-  }
-
-  Future<bool> deleteSchedule(String semesterId, String classId, String timeSlotId) async {
-    try {
-      await _supabase
-          .from('jadwal_pelajaran')
-          .delete()
-          .match({
-            'semester_id': semesterId,
-            'kelas_id': classId,
-            'jam_pelajaran_id': timeSlotId,
-          });
-      return true;
-    } catch (e) {
+      print("Error saveSchedule: $e");
       return false;
     }
   }

@@ -1,23 +1,24 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/network/d1_service.dart';
 import '../models/teacher_models.dart';
-import '../../../core/utils/error_handler.dart';
 
 class TeacherService {
-  final _supabase = Supabase.instance.client;
+  final _d1Service = D1Service();
 
-  /// Mengambil jadwal mengajar guru dari tabel jadwal_pelajaran (Input dari Wakakur)
+  /// Mengambil jadwal mengajar guru dari tabel teaching_schedules
   Future<List<TeachingSchedule>> fetchScheduleByTeacher(String teacherId) async {
     try {
-      final response = await _supabase
-          .from('jadwal_pelajaran')
-          .select('*, kelas(nama), mapel(nama), jam_pelajaran(*)')
-          .eq('guru_id', teacherId);
-      
-      final List data = response as List;
-      return data.map((e) => TeachingSchedule.fromJson(e as Map<String, dynamic>)).toList();
+      final sql = """
+        SELECT ts.*, c.name as class_name, s.name as subject_name, t.start_time, t.end_time, t.day
+        FROM teaching_schedules ts
+        JOIN classes c ON ts.class_id = c.id
+        JOIN subjects s ON ts.subject_id = s.id
+        JOIN time_slots t ON ts.time_slot_id = t.id
+        WHERE ts.teacher_id = ?
+      """;
+      final results = await _d1Service.query(sql, params: [teacherId]);
+      return results.map((e) => TeachingSchedule.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchScheduleByTeacher');
+      print("Error fetchScheduleByTeacher: $e");
       return [];
     }
   }
@@ -25,41 +26,36 @@ class TeacherService {
   /// Mengambil profil guru berdasarkan user_id
   Future<Map<String, dynamic>?> getTeacherProfileByUserId(String userId) async {
     try {
-      final response = await _supabase
-          .from('guru')
-          .select('id, nip, nama, is_wali_kelas')
-          .eq('user_id', userId)
-          .maybeSingle();
-      return response;
+      final sql = "SELECT id, nip, name as nama, is_wali_kelas FROM teachers WHERE user_id = ? LIMIT 1";
+      final results = await _d1Service.query(sql, params: [userId]);
+      return results.isNotEmpty ? results.first : null;
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'getTeacherProfileByUserId');
-      throw err;
+      print("Error getTeacherProfileByUserId: $e");
+      return null;
     }
   }
 
-  /// Mengambil daftar siswa dalam satu kelas (Data Master Operator)
+  /// Mengambil daftar siswa dalam satu kelas
   Future<List<Map<String, dynamic>>> fetchStudentsByClass(String classId) async {
     try {
-      final response = await _supabase
-          .from('siswa')
-          .select('id, nis, nama')
-          .eq('kelas_id', classId)
-          .order('nama');
-      return List<Map<String, dynamic>>.from(response);
+      final sql = "SELECT id, nis, name as nama FROM students WHERE class_id = ? ORDER BY name";
+      final results = await _d1Service.query(sql, params: [classId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchStudentsByClass');
-      throw err;
+      print("Error fetchStudentsByClass: $e");
+      return [];
     }
   }
 
-  /// Real-time: Pengumuman baru langsung muncul (Kepala Sekolah -> Guru)
-  Stream<List<Map<String, dynamic>>> streamAnnouncements() {
-    return _supabase
-        .from('pengumuman')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false)
-        .map((data) => data.where((e) => e['target_role'] == 'all' || e['target_role'] == 'guru').toList());
+  /// Pengumuman (Kepala Sekolah -> Guru)
+  Future<List<Map<String, dynamic>>> getAnnouncements() async {
+    try {
+      final sql = "SELECT * FROM announcements WHERE target_role IN ('all', 'guru') ORDER BY created_at DESC";
+      final results = await _d1Service.query(sql);
+      return List<Map<String, dynamic>>.from(results);
+    } catch (e) {
+      print("Error getAnnouncements: $e");
+      return [];
+    }
   }
 }

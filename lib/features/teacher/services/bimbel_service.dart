@@ -1,25 +1,25 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/network/d1_service.dart';
 import '../models/teacher_models.dart';
-import '../../../core/utils/error_handler.dart';
 
 class BimbelService {
-  final _supabase = Supabase.instance.client;
+  final _d1Service = D1Service();
 
   // ── MANAJEMEN SESI BIMBEL ──────────────────────────────────
   
   Future<List<BimbelSession>> fetchTutorSessions(String teacherId) async {
     try {
-      final response = await _supabase
-          .from('bimbel_sessions')
-          .select('*, program_bimbel(nama)')
-          .eq('teacher_id', teacherId)
-          .order('session_date', ascending: false);
-      
-      return response.map((e) => BimbelSession.fromJson(e)).toList();
+      final sql = """
+        SELECT bs.*, bp.name as program_name
+        FROM bimbel_sessions bs
+        JOIN bimbel_programs bp ON bs.program_id = bp.id
+        WHERE bs.teacher_id = ?
+        ORDER BY bs.session_date DESC
+      """;
+      final results = await _d1Service.query(sql, params: [teacherId]);
+      return results.map((e) => BimbelSession.fromJson(e)).toList();
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchTutorSessions');
-      throw err;
+      print("Error fetchTutorSessions: $e");
+      return [];
     }
   }
 
@@ -27,17 +27,17 @@ class BimbelService {
 
   Future<List<Map<String, dynamic>>> fetchParticipantsByProgram(String programId) async {
     try {
-      final response = await _supabase
-          .from('peserta_bimbel')
-          .select('id, siswa(id, nis, nama)')
-          .eq('program_id', programId)
-          .eq('status', 'active');
-      
-      return List<Map<String, dynamic>>.from(response);
+      final sql = """
+        SELECT bp.id, s.id as student_id, s.nis, s.name as student_name
+        FROM bimbel_participants bp
+        JOIN students s ON bp.student_id = s.id
+        WHERE bp.program_id = ? AND bp.status = 'active'
+      """;
+      final results = await _d1Service.query(sql, params: [programId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'fetchParticipantsByProgram');
-      throw err;
+      print("Error fetchParticipantsByProgram: $e");
+      return [];
     }
   }
 
@@ -49,29 +49,39 @@ class BimbelService {
     String? notes,
   }) async {
     try {
-      await _supabase.from('bimbel_progress').upsert({
-        'session_id': sessionId,
-        'student_id': studentId,
-        'is_present': isPresent,
-        'score': score,
-        'notes': notes,
-      }, onConflict: 'session_id, student_id');
+      final sql = """
+        INSERT INTO bimbel_progress (session_id, student_id, is_present, score, notes)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(session_id, student_id) DO UPDATE SET
+        is_present = excluded.is_present,
+        score = excluded.score,
+        notes = excluded.notes
+      """;
+      await _d1Service.query(sql, params: [
+        sessionId,
+        studentId,
+        isPresent ? 1 : 0,
+        score,
+        notes
+      ]);
     } catch (e) {
-      final err = handleSupabaseError(e);
-      logError(err, context: 'saveBimbelProgress');
-      throw err;
+      print("Error saveBimbelProgress: $e");
+      rethrow;
     }
   }
 
   Future<List<Map<String, dynamic>>> fetchSessionProgress(String sessionId) async {
     try {
-      final response = await _supabase
-          .from('bimbel_progress')
-          .select('*, siswa(nama, nis)')
-          .eq('session_id', sessionId);
-      
-      return List<Map<String, dynamic>>.from(response);
+      final sql = """
+        SELECT bp.*, s.name as student_name, s.nis as student_nis
+        FROM bimbel_progress bp
+        JOIN students s ON bp.student_id = s.id
+        WHERE bp.session_id = ?
+      """;
+      final results = await _d1Service.query(sql, params: [sessionId]);
+      return List<Map<String, dynamic>>.from(results);
     } catch (e) {
+      print("Error fetchSessionProgress: $e");
       return [];
     }
   }

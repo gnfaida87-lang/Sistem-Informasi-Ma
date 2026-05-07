@@ -1,29 +1,28 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'supabase_provider.dart';
+import '../network/d1_service.dart';
+import '../providers/d1_provider.dart';
+import '../../shared/models/app_user.dart';
 
 class AuthState {
-  final Session? session;
-  final String? userRole;
+  final AppUser? user;
   final bool isLoading;
   final String? errorMessage;
 
   AuthState({
-    this.session,
-    this.userRole,
+    this.user,
     this.isLoading = false,
     this.errorMessage,
   });
 
+  bool get isAuthenticated => user != null;
+
   AuthState copyWith({
-    Session? session,
-    String? userRole,
+    AppUser? user,
     bool? isLoading,
     String? errorMessage,
   }) {
     return AuthState(
-      session: session ?? this.session,
-      userRole: userRole ?? this.userRole,
+      user: user ?? this.user,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage ?? this.errorMessage,
     );
@@ -31,74 +30,28 @@ class AuthState {
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  final SupabaseClient _supabase;
+  final D1Service _d1Service;
 
-  AuthNotifier(this._supabase) : super(AuthState(isLoading: true)) {
-    listenAuthChanges();
-  }
+  AuthNotifier(this._d1Service) : super(AuthState(isLoading: false));
 
-  void listenAuthChanges() {
-    _supabase.auth.onAuthStateChange.listen((event) async {
-      final session = event.session;
-      if (session != null) {
-        String? role;
-        try {
-          // get user role from profile if your logic requires
-          final res = await _supabase
-              .from('profiles')
-              .select('role')
-              .eq('user_id', session.user.id)
-              .maybeSingle();
-
-          role = res?['role'] as String?;
-        } catch (_) {
-          // Fallback or handle error
-          role = session.user.userMetadata?['role'] as String?;
-        }
-        
+  Future<void> signIn(String identifier, String password) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    try {
+      final response = await _d1Service.login(identifier, password);
+      
+      if (response['success'] == true) {
+        final user = AppUser.fromJson(response['user']);
         state = state.copyWith(
-          session: session,
-          userRole: role,
+          user: user,
           isLoading: false,
           errorMessage: null,
         );
       } else {
         state = state.copyWith(
-          session: null,
-          userRole: null,
           isLoading: false,
-          errorMessage: null,
+          errorMessage: response['message'] ?? "Login gagal",
         );
       }
-    });
-  }
-
-  Future<void> signIn(String email, String password) async {
-    state = state.copyWith(isLoading: true, errorMessage: null);
-    try {
-      final response = await _supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      
-      String? role;
-      try{
-         final res = await _supabase
-              .from('profiles')
-              .select('role')
-              .eq('user_id', response.session!.user.id)
-              .maybeSingle();
-
-          role = res?['role'] as String?;
-      }catch(_) {
-           role = response.session?.user.userMetadata?['role'] as String?;
-      }
-
-      state = state.copyWith(
-        session: response.session,
-        userRole: role,
-        isLoading: false,
-      );
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -107,19 +60,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> signOut() async {
-    state = state.copyWith(isLoading: true);
-    await _supabase.auth.signOut();
-    state = state.copyWith(
-      session: null,
-      userRole: null,
-      isLoading: false,
-      errorMessage: null,
-    );
+  void signOut() {
+    state = AuthState(user: null, isLoading: false, errorMessage: null);
   }
+
+  /// Alias untuk signOut() — digunakan oleh dashboard screens
+  void logout() => signOut();
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  final supabase = ref.watch(supabaseProvider);
-  return AuthNotifier(supabase);
+  final d1Service = ref.watch(d1ServiceProvider);
+  return AuthNotifier(d1Service);
 });
