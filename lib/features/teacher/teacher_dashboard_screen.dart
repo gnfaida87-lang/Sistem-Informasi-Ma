@@ -465,7 +465,7 @@ class _TeacherDashboardScreenState extends ConsumerState<TeacherDashboardScreen>
   }
 
   Widget _buildInformasiTab() {
-    return const AnnouncementListWidget(targetRole: 'guru');
+    return AnnouncementListWidget(targetRoleFilter: 'guru');
   }
 
   Widget _buildAkunTab() {

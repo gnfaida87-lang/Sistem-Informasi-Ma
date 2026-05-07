@@ -82,6 +82,106 @@ class FinanceService {
     }
   }
 
+  Future<double> getSppAmount(String? levelStr) async {
+    // Sederhanakan logic nominal SPP berdasarkan tingkatan
+    final level = int.tryParse(levelStr ?? '') ?? (levelStr == 'X' ? 10 : levelStr == 'XI' ? 11 : levelStr == 'XII' ? 12 : 10);
+    switch (level) {
+      case 10: return 250000;
+      case 11: return 275000;
+      case 12: return 300000;
+      default: return 250000;
+    }
+  }
+
+  Future<List<OtherFee>> fetchOtherFees() async {
+    try {
+      const sql = "SELECT * FROM other_fees ORDER BY due_date DESC";
+      final results = await _d1Service.query(sql);
+      return results.map((e) => OtherFee.fromJson(e)).toList();
+    } catch (e) {
+      print("Error fetchOtherFees: $e");
+      return [];
+    }
+  }
+
+  Future<void> payOtherFee(String feeId) async {
+    try {
+      const sql = "UPDATE other_fees SET status = 'lunas' WHERE id = ?";
+      await _d1Service.query(sql, params: [feeId]);
+    } catch (e) {
+      print("Error payOtherFee: $e");
+      rethrow;
+    }
+  }
+
+  Future<List<OperationalExpense>> fetchOperationalExpenses() async {
+    try {
+      const sql = "SELECT * FROM operational_expenses ORDER BY date DESC";
+      final results = await _d1Service.query(sql);
+      return results.map((e) => OperationalExpense.fromJson(e)).toList();
+    } catch (e) {
+      print("Error fetchOperationalExpenses: $e");
+      return [];
+    }
+  }
+
+  Future<void> addOperationalExpense(OperationalExpense expense) async {
+    try {
+      const sql = "INSERT INTO operational_expenses (id, description, amount, date, category) VALUES (?, ?, ?, ?, ?)";
+      await _d1Service.query(sql, params: [
+        expense.id,
+        expense.description,
+        expense.amount,
+        expense.date.toIso8601String(),
+        expense.category
+      ]);
+    } catch (e) {
+      print("Error addOperationalExpense: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> updateOperationalExpense(OperationalExpense expense) async {
+    try {
+      const sql = "UPDATE operational_expenses SET description = ?, amount = ?, date = ?, category = ? WHERE id = ?";
+      await _d1Service.query(sql, params: [
+        expense.description,
+        expense.amount,
+        expense.date.toIso8601String(),
+        expense.category,
+        expense.id
+      ]);
+    } catch (e) {
+      print("Error updateOperationalExpense: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> deleteOperationalExpense(String id) async {
+    try {
+      await _d1Service.query("DELETE FROM operational_expenses WHERE id = ?", params: [id]);
+    } catch (e) {
+      print("Error deleteOperationalExpense: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> addSavings(Savings savings) async {
+    try {
+      const sql = "INSERT INTO savings (id, student_id, amount, saved_at, type) VALUES (?, ?, ?, ?, ?)";
+      await _d1Service.query(sql, params: [
+        savings.id,
+        savings.studentId,
+        savings.amount,
+        savings.savedAt.toIso8601String(),
+        savings.type
+      ]);
+    } catch (e) {
+      print("Error addSavings: $e");
+      rethrow;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchActiveStudentsForPayment() async {
     try {
       final sql = """

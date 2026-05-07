@@ -500,11 +500,16 @@ class _WakakurKenaikanKelasState extends ConsumerState<WakakurKenaikanKelas> wit
       final auth = ref.read(authProvider); // Assume authProvider gives current user
       final activeSemester = ref.read(activeSemesterProvider).value;
 
+      final studentIds = _evaluations
+          .where((e) => e['manual_status'] == true)
+          .map((e) => e['student_id'] as String)
+          .toList();
+
       await service.executeMassPromotion(
-        evaluations: _evaluations,
-        targetClassId: _selectedToClassId == 'GRADUATE' ? null : _selectedToClassId,
-        academicYearId: activeSemester?.yearId ?? '',
-        userId: auth.session?.user.id ?? '',
+        studentIds: studentIds,
+        targetClassId: _selectedToClassId == 'GRADUATE' ? '' : (_selectedToClassId ?? ''),
+        userId: auth.user?.id ?? '',
+        isGraduation: _selectedToClassId == 'GRADUATE',
       );
 
       setState(() {

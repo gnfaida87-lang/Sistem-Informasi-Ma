@@ -78,9 +78,8 @@ class _WaliKelasDataSiswaScreenState extends State<WaliKelasDataSiswaScreen> wit
                   itemCount: _students.length,
                   itemBuilder: (context, index) {
                     final student = _students[index];
-                    final parent = (student['orang_tua_siswa'] as List).isNotEmpty 
-                        ? student['orang_tua_siswa'][0]['orang_tua'] 
-                        : null;
+                    final parentName = student['parent_name'] ?? 'Tidak terdata';
+                    final parentPhone = student['parent_phone'];
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -91,7 +90,7 @@ class _WaliKelasDataSiswaScreenState extends State<WaliKelasDataSiswaScreen> wit
                           backgroundColor: Colors.blue.shade50,
                           child: Text('${index + 1}', style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold)),
                         ),
-                        title: Text(student['nama'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
+                        title: Text(student['name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
                         subtitle: Text('NIS: ${student['nis'] ?? '-'}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                         children: [
                           Padding(
@@ -100,14 +99,14 @@ class _WaliKelasDataSiswaScreenState extends State<WaliKelasDataSiswaScreen> wit
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Divider(),
-                                _buildDetailItem(Icons.person_outline, 'Nama Orang Tua', parent?['nama'] ?? 'Tidak terdata'),
-                                _buildDetailItem(Icons.phone_android, 'WhatsApp Ortu', parent?['no_hp'] ?? 'Tidak terdata'),
+                                _buildDetailItem(Icons.person_outline, 'Nama Orang Tua', parentName),
+                                _buildDetailItem(Icons.phone_android, 'WhatsApp Ortu', parentPhone ?? 'Tidak terdata'),
                                 const SizedBox(height: 16),
-                                if (parent?['no_hp'] != null)
+                                if (parentPhone != null && parentPhone.toString().isNotEmpty)
                                   SizedBox(
                                     width: double.infinity,
                                     child: ElevatedButton.icon(
-                                      onPressed: () => _launchWhatsApp(parent['no_hp'], student['nama']),
+                                      onPressed: () => _launchWhatsApp(parentPhone.toString(), student['name'] ?? ''),
                                       icon: const Icon(Icons.message, size: 18),
                                       label: const Text('Hubungi Orang Tua'),
                                       style: ElevatedButton.styleFrom(

@@ -35,7 +35,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (authState.user != null) {
       if (!mounted) return;
       // Navigasi berdasarkan role dari AppUser
-      final role = authState.user!.roleCode;
+      final role = authState.user!.roleCode ?? '';
       context.go(AppRoutes.dashboardForRole(role));
     } else if (authState.errorMessage != null) {
       _showError(authState.errorMessage!);

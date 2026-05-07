@@ -240,6 +240,36 @@ class MasterService {
     }
   }
 
+  Future<void> addMajor(Major major) async {
+    try {
+      final id = major.id.isEmpty ? 'mjr_${DateTime.now().millisecondsSinceEpoch}' : major.id;
+      const sql = "INSERT INTO majors (id, code, name) VALUES (?, ?, ?)";
+      await _d1Service.query(sql, params: [id, major.code, major.name]);
+    } catch (e) {
+      print("Error addMajor: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> updateMajor(Major major) async {
+    try {
+      const sql = "UPDATE majors SET code = ?, name = ? WHERE id = ?";
+      await _d1Service.query(sql, params: [major.code, major.name, major.id]);
+    } catch (e) {
+      print("Error updateMajor: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> deleteMajor(String id) async {
+    try {
+      await _d1Service.query("DELETE FROM majors WHERE id = ?", params: [id]);
+    } catch (e) {
+      print("Error deleteMajor: $e");
+      rethrow;
+    }
+  }
+
   // ══════════════════════════════════════════════════════
   // TABEL TAHUN AJARAN (ACADEMIC YEARS)
   // ══════════════════════════════════════════════════════
@@ -252,6 +282,36 @@ class MasterService {
     } catch (e) {
       print("Error fetchAllAcademicYears: $e");
       return [];
+    }
+  }
+
+  Future<void> addAcademicYear(AcademicYear year) async {
+    try {
+      final id = year.id.isEmpty ? 'ay_${DateTime.now().millisecondsSinceEpoch}' : year.id;
+      const sql = "INSERT INTO academic_years (id, year_name, is_active) VALUES (?, ?, ?)";
+      await _d1Service.query(sql, params: [id, year.year, year.isActive ? 1 : 0]);
+    } catch (e) {
+      print("Error addAcademicYear: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> updateAcademicYear(AcademicYear year) async {
+    try {
+      const sql = "UPDATE academic_years SET year_name = ?, is_active = ? WHERE id = ?";
+      await _d1Service.query(sql, params: [year.year, year.isActive ? 1 : 0, year.id]);
+    } catch (e) {
+      print("Error updateAcademicYear: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> deleteAcademicYear(String id) async {
+    try {
+      await _d1Service.query("DELETE FROM academic_years WHERE id = ?", params: [id]);
+    } catch (e) {
+      print("Error deleteAcademicYear: $e");
+      rethrow;
     }
   }
 
@@ -277,6 +337,36 @@ class MasterService {
     } catch (e) {
       print("Error fetchAllEkskul: $e");
       return [];
+    }
+  }
+
+  Future<void> addEkskul(Extracurricular ekskul) async {
+    try {
+      final id = ekskul.id.isEmpty ? 'ex_${DateTime.now().millisecondsSinceEpoch}' : ekskul.id;
+      const sql = "INSERT INTO extracurriculars (id, name, coach) VALUES (?, ?, ?)";
+      await _d1Service.query(sql, params: [id, ekskul.name, ekskul.coach]);
+    } catch (e) {
+      print("Error addEkskul: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> updateEkskul(Extracurricular ekskul) async {
+    try {
+      const sql = "UPDATE extracurriculars SET name = ?, coach = ? WHERE id = ?";
+      await _d1Service.query(sql, params: [ekskul.name, ekskul.coach, ekskul.id]);
+    } catch (e) {
+      print("Error updateEkskul: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> deleteEkskul(String id) async {
+    try {
+      await _d1Service.query("DELETE FROM extracurriculars WHERE id = ?", params: [id]);
+    } catch (e) {
+      print("Error deleteEkskul: $e");
+      rethrow;
     }
   }
 
@@ -313,6 +403,57 @@ class MasterService {
     } catch (e) {
       print("Error fetchAllBimbel: $e");
       return [];
+    }
+  }
+
+  Future<void> addBimbel(Tutoring bimbel) async {
+    try {
+      final id = bimbel.id.isEmpty ? 'tut_${DateTime.now().millisecondsSinceEpoch}' : bimbel.id;
+      const sql = "INSERT INTO tutoring_programs (id, name, teacher_id) VALUES (?, ?, ?)";
+      await _d1Service.query(sql, params: [id, bimbel.name, bimbel.teacherId]);
+    } catch (e) {
+      print("Error addBimbel: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> updateBimbel(Tutoring bimbel) async {
+    try {
+      const sql = "UPDATE tutoring_programs SET name = ?, teacher_id = ? WHERE id = ?";
+      await _d1Service.query(sql, params: [bimbel.name, bimbel.teacherId, bimbel.id]);
+    } catch (e) {
+      print("Error updateBimbel: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> deleteBimbel(String id) async {
+    try {
+      await _d1Service.query("DELETE FROM tutoring_programs WHERE id = ?", params: [id]);
+    } catch (e) {
+      print("Error deleteBimbel: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> addBimbelParticipant(String bimbelId, String studentId) async {
+    try {
+      const sql = "INSERT INTO tutoring_participants (id, program_id, student_id) VALUES (?, ?, ?)";
+      final id = 'tp_${DateTime.now().millisecondsSinceEpoch}';
+      await _d1Service.query(sql, params: [id, bimbelId, studentId]);
+    } catch (e) {
+      print("Error addBimbelParticipant: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> removeBimbelParticipant(String participantId) async {
+    try {
+      const sql = "DELETE FROM tutoring_participants WHERE id = ?";
+      await _d1Service.query(sql, params: [participantId]);
+    } catch (e) {
+      print("Error removeBimbelParticipant: $e");
+      rethrow;
     }
   }
 

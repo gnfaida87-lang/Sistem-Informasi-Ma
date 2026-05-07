@@ -31,4 +31,8 @@ class AnnouncementService {
       return false;
     }
   }
+
+  Stream<List<Announcement>> streamAnnouncements() {
+    return Stream.fromFuture(getAnnouncements());
+  }
 }

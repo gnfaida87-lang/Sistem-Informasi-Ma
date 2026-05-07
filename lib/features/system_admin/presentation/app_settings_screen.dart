@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/constants/app_settings.dart';
 import '../../../core/providers/system_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/mixins/safe_async_mixin.dart';
 import '../../../core/utils/context_extensions.dart';
 import '../../../core/network/d1_service.dart';

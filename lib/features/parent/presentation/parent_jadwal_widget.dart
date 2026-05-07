@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/providers/auth_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../academic_config/services/schedule_service.dart';
 import '../../academic_config/services/academic_service.dart';
 import '../../academic_config/models/scheduling_models.dart';

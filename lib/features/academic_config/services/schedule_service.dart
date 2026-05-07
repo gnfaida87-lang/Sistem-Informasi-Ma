@@ -103,4 +103,35 @@ class ScheduleService {
       return false;
     }
   }
+
+  Future<List<ScheduleRow>> getSchedules(String semesterId, List<String> classIds, String day) async {
+    try {
+      if (classIds.isEmpty) return [];
+      final placeholders = classIds.map((_) => '?').join(',');
+      final sql = """
+        SELECT ts.*, t.start_time, t.end_time, t.day, tc.name as teacher_name, s.name as subject_name, c.name as class_name
+        FROM teaching_schedules ts
+        JOIN time_slots t ON ts.time_slot_id = t.id
+        JOIN teachers tc ON ts.teacher_id = tc.id
+        JOIN subjects s ON ts.subject_id = s.id
+        JOIN classes c ON ts.class_id = c.id
+        WHERE ts.academic_year_id = ? AND ts.class_id IN ($placeholders) AND t.day = ?
+      """;
+      final results = await _d1Service.query(sql, params: [semesterId, ...classIds, day]);
+      return results.map((json) => ScheduleRow.fromJson(json)).toList();
+    } catch (e) {
+      print("Error getSchedules: $e");
+      return [];
+    }
+  }
+
+  Future<void> deleteSchedule(String semesterId, String classId, String timeSlotId) async {
+    try {
+      const sql = "DELETE FROM teaching_schedules WHERE academic_year_id = ? AND class_id = ? AND time_slot_id = ?";
+      await _d1Service.query(sql, params: [semesterId, classId, timeSlotId]);
+    } catch (e) {
+      print("Error deleteSchedule: $e");
+      rethrow;
+    }
+  }
 }

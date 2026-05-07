@@ -79,4 +79,69 @@ class PromotionService {
       return [];
     }
   }
+
+  Future<void> addCriteria(PromotionCriteria criteria) async {
+    try {
+      const sql = "INSERT INTO promotion_criteria (id, title, value, category, is_active) VALUES (?, ?, ?, ?, 1)";
+      await _d1Service.query(sql, params: [
+        criteria.id ?? 'crit_${DateTime.now().millisecondsSinceEpoch}',
+        criteria.title,
+        criteria.value,
+        criteria.category
+      ]);
+    } catch (e) {
+      print("Error addCriteria: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> updateCriteria(PromotionCriteria criteria) async {
+    try {
+      const sql = "UPDATE promotion_criteria SET title = ?, value = ?, category = ? WHERE id = ?";
+      await _d1Service.query(sql, params: [criteria.title, criteria.value, criteria.category, criteria.id]);
+    } catch (e) {
+      print("Error updateCriteria: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> deleteCriteria(String id) async {
+    try {
+      const sql = "UPDATE promotion_criteria SET is_active = 0 WHERE id = ?";
+      await _d1Service.query(sql, params: [id]);
+    } catch (e) {
+      print("Error deleteCriteria: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> executeMassPromotion({
+    required List<String> studentIds,
+    required String targetClassId,
+    required String userId,
+    required bool isGraduation,
+  }) async {
+    try {
+      if (isGraduation) {
+        for (var id in studentIds) {
+          const sqlAlumni = "INSERT INTO alumni (id, student_id, graduation_year, last_class_name) VALUES (?, ?, ?, ?)";
+          await _d1Service.query(sqlAlumni, params: [
+            'alm_${DateTime.now().millisecondsSinceEpoch}_$id',
+            id,
+            DateTime.now().year.toString(),
+            'Kelas XII'
+          ]);
+          await _d1Service.query("UPDATE students SET is_active = 0, status = 'alumni' WHERE id = ?", params: [id]);
+        }
+      } else {
+        if (studentIds.isEmpty) return;
+        final placeholders = studentIds.map((_) => '?').join(',');
+        final sql = "UPDATE students SET class_id = ? WHERE id IN ($placeholders)";
+        await _d1Service.query(sql, params: [targetClassId, ...studentIds]);
+      }
+    } catch (e) {
+      print("Error executeMassPromotion: $e");
+      rethrow;
+    }
+  }
 }
