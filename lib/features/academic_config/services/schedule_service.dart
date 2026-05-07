@@ -68,6 +68,24 @@ class ScheduleService {
     }
   }
 
+  Future<List<ScheduleRow>> getClassSchedules(String classId, String semesterId) async {
+    try {
+      final sql = """
+        SELECT ts.*, t.start_time, t.end_time, t.day, tc.name as teacher_name, s.name as subject_name
+        FROM teaching_schedules ts
+        JOIN time_slots t ON ts.time_slot_id = t.id
+        JOIN teachers tc ON ts.teacher_id = tc.id
+        JOIN subjects s ON ts.subject_id = s.id
+        WHERE ts.class_id = ? AND ts.academic_year_id = ?
+      """;
+      final results = await _d1Service.query(sql, params: [classId, semesterId]);
+      return results.map((json) => ScheduleRow.fromJson(json)).toList();
+    } catch (e) {
+      print("Error getClassSchedules: $e");
+      return [];
+    }
+  }
+
   Future<bool> saveSchedule(String semesterId, String classId, String timeSlotId, String teacherId, String subjectId) async {
     try {
       final sql = """

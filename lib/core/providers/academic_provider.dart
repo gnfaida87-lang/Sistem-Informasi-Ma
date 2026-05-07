@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/academic_config/services/academic_service.dart';
 import '../../features/academic_config/services/schedule_service.dart';
+import '../../features/academic_config/services/grading_service.dart';
 import '../../features/academic_config/models/academic_models.dart';
 
 final academicServiceProvider = Provider((ref) => AcademicService());
 final scheduleServiceProvider = Provider((ref) => ScheduleService());
+final gradingServiceProvider  = Provider((ref) => GradingService());
 
 final semestersProvider = FutureProvider<List<Semester>>((ref) async {
   final service = ref.watch(academicServiceProvider);

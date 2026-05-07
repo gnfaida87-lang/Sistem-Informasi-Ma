@@ -43,17 +43,22 @@ class _OperatorDashboardScreenState extends ConsumerState<OperatorDashboardScree
       final user = ref.read(authProvider).user;
       
       if (user != null) {
-        final siswaData = await _d1Service.query("SELECT COUNT(*) as count FROM siswa");
-        final guruData = await _d1Service.query("SELECT COUNT(*) as count FROM guru");
+        final siswaData = await _d1Service.query("SELECT COUNT(*) as count FROM students WHERE is_active = 1");
+        final guruData = await _d1Service.query("SELECT COUNT(*) as count FROM teachers WHERE is_active = 1");
         
-        final logData = await _d1Service.query(
-          "SELECT table_name, action, description, performed_at FROM audit_log ORDER BY performed_at DESC LIMIT 5"
-        );
+        List<dynamic> logData = [];
+        try {
+          logData = await _d1Service.query(
+            "SELECT table_name, action, description, performed_at FROM audit_log ORDER BY performed_at DESC LIMIT 5"
+          );
+        } catch (_) {
+          // audit_log table mungkin belum ada di D1 schema
+        }
 
         if (mounted) {
           setState(() {
-            _totalSiswa = (siswaData as List).first['count'] ?? 0;
-            _totalGuru = (guruData as List).first['count'] ?? 0;
+            _totalSiswa = (siswaData as List).isNotEmpty ? ((siswaData.first['count'] ?? 0) as num).toInt() : 0;
+            _totalGuru = (guruData as List).isNotEmpty ? ((guruData.first['count'] ?? 0) as num).toInt() : 0;
             _recentActivities = List<Map<String, dynamic>>.from(logData as List);
             _isLoading = false;
           });

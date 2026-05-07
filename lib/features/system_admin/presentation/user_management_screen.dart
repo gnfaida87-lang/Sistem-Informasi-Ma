@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/network/d1_service.dart';
+import '../../../core/utils/context_extensions.dart';
 import '../../../shared/models/app_user.dart';
 
 class UserManagementScreen extends StatefulWidget {

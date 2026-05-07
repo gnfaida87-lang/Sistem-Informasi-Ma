@@ -22,14 +22,14 @@ class ChildSchedule {
   });
 
   factory ChildSchedule.fromJson(Map<String, dynamic> json) => ChildSchedule(
-        id: json['id'],
-        studentId: json['student_id'],
-        studentName: json['students']?['name'] ?? '',
-        subjectName: json['subjects']?['name'] ?? '',
-        className: json['classes']?['name'] ?? '',
+        id: json['id']?.toString() ?? '',
+        studentId: json['student_id']?.toString() ?? '',
+        studentName: json['student_name'] ?? '',
+        subjectName: json['subject_name'] ?? '',
+        className: json['class_name'] ?? '',
         day: json['day'] ?? json['day_of_week'] ?? '',
-        startTime: json['start_time'],
-        endTime: json['end_time'],
+        startTime: json['start_time'] ?? '',
+        endTime: json['end_time'] ?? '',
       );
 }
 
