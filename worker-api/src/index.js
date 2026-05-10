@@ -38,7 +38,7 @@ async function handleLogin(request, env) {
     `).bind(identifier, identifier).all();
 
     if (!userResult.results || userResult.results.length === 0) {
-      return corsResponse({ message: "Username atau password salah" }, 401);
+      return corsResponse({ message: `Username '${identifier}' tidak ditemukan di database` }, 401);
     }
 
     const user = userResult.results[0];
@@ -47,7 +47,13 @@ async function handleLogin(request, env) {
     // Verifikasi SHA-256
     const inputHash = await sha256(password);
     if (user.password_hash !== inputHash) {
-      return corsResponse({ message: "Username atau password salah" }, 401);
+      return corsResponse({ 
+        message: "Password salah", 
+        debug: {
+          input_hash: inputHash,
+          stored_hash: user.password_hash
+        } 
+      }, 401);
     }
 
     const rolesResult = await env.DB.prepare(`
