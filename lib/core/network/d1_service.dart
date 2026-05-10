@@ -36,6 +36,7 @@ class D1Service {
 
   /// Khusus untuk proses Login
   Future<Map<String, dynamic>> login(String identifier, String password) async {
+    print("DEBUG: Memulai login ke ${D1Config.baseUrl}/login");
     try {
       final response = await http.post(
         Uri.parse("${D1Config.baseUrl}/login"),
@@ -44,16 +45,26 @@ class D1Service {
           "identifier": identifier,
           "password": password,
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
+
+      print("DEBUG: Response Status: ${response.statusCode}");
+      print("DEBUG: Response Body: ${response.body}");
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
         final errorData = jsonDecode(response.body);
-        throw Exception(errorData['message'] ?? "Login gagal");
+        return {
+          "success": false,
+          "message": errorData['message'] ?? "Login gagal (Status ${response.statusCode})"
+        };
       }
     } catch (e) {
-      throw Exception("Kesalahan Login D1: $e");
+      print("DEBUG: Error Login: $e");
+      return {
+        "success": false,
+        "message": "Kesalahan koneksi: $e"
+      };
     }
   }
 }
