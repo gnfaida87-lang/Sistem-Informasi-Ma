@@ -236,16 +236,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _buildLoginButton(_ResponsiveSizes sizes, bool isLoading) {
-    return ElevatedButton(
-      onPressed: isLoading ? null : _handleLogin,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.indigo.shade600,
-        padding: EdgeInsets.symmetric(vertical: sizes.buttonPadding),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(sizes.inputBorderRadius)),
-      ),
-      child: isLoading 
-        ? const CircularProgressIndicator(color: Colors.white)
-        : const Text('Masuk', style: TextStyle(fontWeight: FontWeight.bold)),
+    return Column(
+      children: [
+        if (isLoading) const CircularProgressIndicator(),
+        const SizedBox(height: 10),
+        MaterialButton(
+          minWidth: double.infinity,
+          height: 50,
+          color: Colors.blue,
+          onPressed: () {
+            print("!!! TOMBOL MASUK DITEKAN !!!");
+            _handleLogin();
+          },
+          child: const Text(
+            "MASUK",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
     );
   }
 }
