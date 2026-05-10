@@ -1,0 +1,18 @@
+{
+  "name": "sistem-informasi-ma-api",
+  "version": "1.0.1",
+  "description": "Cloudflare Worker API Bridge untuk Sistem Informasi Madrasah",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev":             "wrangler dev",
+    "deploy":          "wrangler deploy",
+    "db:create":       "wrangler d1 create si-madrasah",
+    "db:migrate":      "wrangler d1 execute si-madrasah --file=./schema.sql",
+    "db:migrate:prod": "wrangler d1 execute si-madrasah --remote --file=./schema.sql",
+    "secret:set":      "wrangler secret put API_KEY"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

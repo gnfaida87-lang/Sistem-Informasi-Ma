@@ -1,16 +1,22 @@
+// ── UTILITY: SHA-256 HASHING ──────────────────────────────────
+async function sha256(message) {
+  const msgUint8 = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // ── UTILITY: CORS RESPONSE ───────────────────────────────────
 function corsResponse(data, status = 200) {
-  const headers = {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization, Accept, Origin",
-    "Access-Control-Max-Age": "86400",
-  };
-
   return new Response(JSON.stringify(data), {
     status,
-    headers
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
+      "Access-Control-Max-Age": "86400",
+    },
   });
 }
 
@@ -20,13 +26,10 @@ async function handleLogin(request, env) {
     const body = await request.json();
     const { identifier, password } = body;
 
-    console.log("Login attempt for:", identifier);
-
     if (!identifier || !password) {
       return corsResponse({ message: "Username dan password wajib diisi" }, 400);
     }
 
-    // Cari user berdasarkan username atau email
     const userResult = await env.DB.prepare(`
       SELECT u.id, u.username, u.email, u.password_hash, u.is_active
       FROM users u
@@ -35,24 +38,18 @@ async function handleLogin(request, env) {
     `).bind(identifier, identifier).all();
 
     if (!userResult.results || userResult.results.length === 0) {
-      console.log("User not found:", identifier);
       return corsResponse({ message: "Username atau password salah" }, 401);
     }
 
     const user = userResult.results[0];
+    if (user.is_active === 0) return corsResponse({ message: "Akun nonaktif" }, 403);
 
-    // Cek status aktif
-    if (user.is_active === 0) {
-      return corsResponse({ message: "Akun Anda dinonaktifkan" }, 403);
-    }
-
-    // Verifikasi password (plain text)
-    if (user.password_hash !== password) {
-      console.log("Wrong password for:", identifier);
+    // Verifikasi SHA-256
+    const inputHash = await sha256(password);
+    if (user.password_hash !== inputHash) {
       return corsResponse({ message: "Username atau password salah" }, 401);
     }
 
-    // Ambil roles user
     const rolesResult = await env.DB.prepare(`
       SELECT r.code, r.nama, ur.is_primary
       FROM user_roles ur
@@ -60,85 +57,54 @@ async function handleLogin(request, env) {
       WHERE ur.user_id = ?
     `).bind(user.id).all();
 
-    console.log("Login success for:", identifier);
-
     return corsResponse({
       success: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email
-      },
+      user: { id: user.id, username: user.username, email: user.email },
       role: rolesResult.results.find(r => r.is_primary === 1)?.code || rolesResult.results[0]?.code,
       roles: rolesResult.results
     });
   } catch (err) {
-    console.error("Login error:", err);
     return corsResponse({ message: "Server error", error: err.message }, 500);
   }
 }
 
 // ── HANDLER QUERY ─────────────────────────────────────────────
 async function handleQuery(request, env) {
+  // Cek API Key untuk keamanan ekstra sesuai analisis Anda
+  const apiKey = request.headers.get("X-API-Key");
+  if (apiKey !== env.API_KEY && env.API_KEY) {
+    return corsResponse({ message: "Unauthorized: Invalid API Key" }, 401);
+  }
+
   try {
     const body = await request.json();
     const { sql, params } = body;
-
-    if (!sql) {
-      return corsResponse({ message: "SQL query wajib diisi" }, 400);
-    }
-
-    // Eksekusi query
     const result = await env.DB.prepare(sql).bind(...(params || [])).all();
-
-    // D1Service di Flutter mengharapkan objek dengan key "results"
-    return corsResponse({
-      results: result.results || [],
-      success: true,
-      meta: result.meta
-    });
+    return corsResponse({ results: result.results || [], success: true });
   } catch (err) {
-    console.error("Query error:", err);
-    return corsResponse({ 
-      message: "Gagal menjalankan query", 
-      error: err.message 
-    }, 500);
+    return corsResponse({ message: "Query error", error: err.message }, 500);
   }
 }
 
-// ── MAIN FETCH HANDLER ────────────────────────────────────────
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Handle Preflight Request (OPTIONS)
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: {
           "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization, Accept, Origin",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
           "Access-Control-Max-Age": "86400",
         }
       });
     }
 
-    try {
-      if (url.pathname === "/login" && request.method === "POST") {
-        return await handleLogin(request, env);
-      }
+    if (url.pathname === "/login") return await handleLogin(request, env);
+    if (url.pathname === "/query") return await handleQuery(request, env);
+    if (url.pathname === "/health") return corsResponse({ status: "ok" });
 
-      if (url.pathname === "/query" && request.method === "POST") {
-        return await handleQuery(request, env);
-      }
-
-      if (url.pathname === "/health") {
-        return corsResponse({ status: "ok", message: "Worker aktif" });
-      }
-
-      return corsResponse({ message: "Endpoint tidak ditemukan" }, 404);
-    } catch (e) {
-      return corsResponse({ message: "Internal Server Error", error: e.message }, 500);
-    }
-  },
+    return corsResponse({ message: "Not Found" }, 404);
+  }
 };
