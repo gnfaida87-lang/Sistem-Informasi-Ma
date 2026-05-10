@@ -280,10 +280,10 @@ class _WakakurDashboardScreenState extends ConsumerState<WakakurDashboardScreen>
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       children: [
-        _buildStatCard(Colors.blue, '95%', 'Progress Rapor', Icons.assignment_turned_in),
-        _buildStatCard(Colors.red, '12', 'Guru Belum Input', Icons.pending_actions),
-        _buildStatCard(Colors.orange, '5', 'Kelas Belum Absen', Icons.event_busy),
-        _buildStatCard(Colors.teal, '3.210', 'Plotting Jam', Icons.schedule),
+        _buildStatCard(Colors.blue, '0%', 'Progress Rapor', Icons.assignment_turned_in),
+        _buildStatCard(Colors.red, '0', 'Guru Belum Input', Icons.pending_actions),
+        _buildStatCard(Colors.orange, '0', 'Kelas Belum Absen', Icons.event_busy),
+        _buildStatCard(Colors.teal, '0', 'Plotting Jam', Icons.schedule),
       ],
     );
   }

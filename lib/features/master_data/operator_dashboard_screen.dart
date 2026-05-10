@@ -296,8 +296,8 @@ class _OperatorDashboardScreenState extends ConsumerState<OperatorDashboardScree
       children: [
         _buildStatCard(Colors.blue, _totalSiswa.toString(), 'Siswa', Icons.groups),
         _buildStatCard(Colors.green, _totalGuru.toString(), 'Guru', Icons.badge),
-        _buildStatCard(Colors.orange, '36', 'Kelas', Icons.meeting_room),
-        _buildStatCard(Colors.purple, '42', 'Mapel', Icons.auto_stories),
+        _buildStatCard(Colors.orange, '0', 'Kelas', Icons.meeting_room),
+        _buildStatCard(Colors.purple, '0', 'Mapel', Icons.auto_stories),
       ],
     );
   }

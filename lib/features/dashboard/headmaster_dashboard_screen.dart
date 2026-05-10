@@ -23,7 +23,7 @@ class _HeadmasterDashboardScreenState extends ConsumerState<HeadmasterDashboardS
   
   int _totalSiswa = 0;
   int _totalGuru = 0;
-  double _avgAttendance = 96.5; 
+  double _avgAttendance = 0.0; 
   String _totalFinance = "Rp 0";
 
   @override
@@ -38,8 +38,8 @@ class _HeadmasterDashboardScreenState extends ConsumerState<HeadmasterDashboardS
       final user = ref.read(authProvider).user;
       
       if (user != null) {
-        final siswaData = await _d1Service.query("SELECT COUNT(*) as count FROM siswa");
-        final guruData = await _d1Service.query("SELECT COUNT(*) as count FROM guru");
+        final siswaData = await _d1Service.query("SELECT COUNT(*) as count FROM students");
+        final guruData = await _d1Service.query("SELECT COUNT(*) as count FROM teachers");
         
         if (mounted) {
           setState(() {
@@ -249,7 +249,7 @@ class _HeadmasterDashboardScreenState extends ConsumerState<HeadmasterDashboardS
               children: [
                 _buildStatCard(Colors.blue, _totalSiswa.toString(), 'Siswa Aktif', Icons.people_alt),
                 _buildStatCard(Colors.green, '$_avgAttendance%', 'Kehadiran', Icons.how_to_reg),
-                _buildStatCard(Colors.orange, '88.2%', 'Ketuntasan', Icons.fact_check),
+                _buildStatCard(Colors.orange, '0%', 'Ketuntasan', Icons.fact_check),
                 _buildStatCard(Colors.purple, _totalFinance, 'Pemasukan', Icons.payments),
               ],
             ),
