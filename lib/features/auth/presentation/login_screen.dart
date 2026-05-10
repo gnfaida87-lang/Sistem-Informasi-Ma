@@ -19,6 +19,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
 
   Future<void> _handleLogin() async {
+    print("DEBUG UI: Tombol Masuk diklik!");
     final identifier = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
