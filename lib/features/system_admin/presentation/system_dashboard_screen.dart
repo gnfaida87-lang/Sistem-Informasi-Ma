@@ -68,15 +68,15 @@ class SystemDashboardScreen extends StatelessWidget {
                         children: [
                           Row(
                             children: [
-                              Expanded(child: _buildStatCard(Colors.pinkAccent, '2455', 'Siswa Terdaftar', Icons.school)),
+                              Expanded(child: _buildStatCard(Colors.pinkAccent, '0', 'Siswa Terdaftar', Icons.school)),
                               const SizedBox(width: 16),
-                              Expanded(child: _buildStatCard(Colors.lightBlueAccent, '124', 'Guru Aktif', Icons.person)),
+                              Expanded(child: _buildStatCard(Colors.lightBlueAccent, '0', 'Guru Aktif', Icons.person)),
                             ],
                           ),
                           const SizedBox(height: 16),
                           Row(
                             children: [
-                              Expanded(child: _buildStatCard(Colors.purpleAccent, '18,5M', 'Pemasukan (Bulan)', Icons.attach_money)),
+                               Expanded(child: _buildStatCard(Colors.purpleAccent, '0', 'Pemasukan (Bulan)', Icons.attach_money)),
                               const SizedBox(width: 16),
                               Expanded(child: _buildStatCard(Colors.white, '99%', 'Server Uptime', Icons.dns, isLight: true)),
                             ],
@@ -260,10 +260,12 @@ class SystemDashboardScreen extends StatelessWidget {
         children: [
           const Text('User Baru Didaftarkan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 24),
-          _userListItem('Ahmad Fauzi', 'GURU_MAPEL', Colors.blue.shade50),
-          _userListItem('Rina Sulistyowati', 'SISWA', Colors.purple.shade50),
-          _userListItem('Budi Santoso', 'ORANG_TUA', Colors.green.shade50),
-          _userListItem('Siti Aminah', 'ADMIN_KEUANGAN', Colors.orange.shade50),
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Text('Belum ada user baru', style: TextStyle(color: Colors.grey, fontSize: 13)),
+            ),
+          ),
         ],
       ),
     );
@@ -301,11 +303,11 @@ class SystemDashboardScreen extends StatelessWidget {
               children: [
                 SizedBox(
                   width: 120, height: 120,
-                  child: CircularProgressIndicator(value: 0.74, strokeWidth: 12, backgroundColor: Colors.grey.shade100, color: Colors.purpleAccent),
+                   child: CircularProgressIndicator(value: 0, strokeWidth: 12, backgroundColor: Colors.grey.shade100, color: Colors.purpleAccent),
                 ),
                 const Column(
                   children: [
-                    Text('74%', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                    Text('0%', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                     Text('Semester Ini', style: TextStyle(fontSize: 10, color: Colors.grey)),
                   ],
                 )
