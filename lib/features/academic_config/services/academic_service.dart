@@ -1,5 +1,7 @@
-import '../../../core/network/d1_service.dart';
+﻿import '../../../core/network/d1_service.dart';
+import 'package:flutter/foundation.dart';
 import '../models/academic_models.dart';
+import 'package:flutter/foundation.dart';
 
 class AcademicService {
   final _d1Service = D1Service();
@@ -9,15 +11,15 @@ class AcademicService {
     try {
       // D1 (SQLite): flat JOIN query, bukan nested object
       const sql = """
-        SELECT s.*, ay.year_name as tahun_ajaran_nama
+        SELECT s.*, ay.tahun as tahun_ajaran_nama
         FROM semesters s
-        LEFT JOIN academic_years ay ON s.academic_year_id = ay.id
-        ORDER BY ay.year_name DESC, s.name ASC
+        LEFT JOIN academic_years ay ON s.tahun_ajaran_id = ay.id
+        ORDER BY ay.tahun DESC, s.nama ASC
       """;
       final results = await _d1Service.query(sql);
       return results.map((json) => Semester.fromJson(json as Map<String, dynamic>)).toList();
     } catch (e) {
-      print("Error getActiveSemesters: $e");
+      debugPrint("Error getActiveSemesters: $e");
       // Fallback: langsung dari academic_years jika tabel semesters belum ada
       return _getFallbackFromAcademicYears();
     }
@@ -26,15 +28,15 @@ class AcademicService {
   Future<List<Semester>> _getFallbackFromAcademicYears() async {
     try {
       const sql = """
-        SELECT id, year_name as nama, is_active, 75 as kkm_default, 0 as is_validated,
-               NULL as validated_by, year_name as tahun_ajaran_nama
+        SELECT id, tahun as nama, is_active, 75 as kkm_default, 0 as is_validated,
+               NULL as validated_by, tahun as tahun_ajaran_nama
         FROM academic_years
-        ORDER BY year_name DESC
+        ORDER BY tahun DESC
       """;
       final results = await _d1Service.query(sql);
       return results.map((json) => Semester.fromFlatJson(json as Map<String, dynamic>)).toList();
     } catch (e) {
-      print("Error _getFallbackFromAcademicYears: $e");
+      debugPrint("Error _getFallbackFromAcademicYears: $e");
       return [];
     }
   }
@@ -51,7 +53,7 @@ class AcademicService {
       }
       return true;
     } catch (e) {
-      print("Error validateSemester: $e");
+      debugPrint("Error validateSemester: $e");
       return false;
     }
   }
@@ -67,7 +69,7 @@ class AcademicService {
       }
       return true;
     } catch (e) {
-      print("Error validateAllActiveSemesters: $e");
+      debugPrint("Error validateAllActiveSemesters: $e");
       return false;
     }
   }
@@ -79,7 +81,7 @@ class AcademicService {
       final results = await _d1Service.query(sql);
       return results.map((map) => Department.fromJson(map as Map<String, dynamic>)).toList();
     } catch (e) {
-      print("Error getDepartments: $e");
+      debugPrint("Error getDepartments: $e");
       return [];
     }
   }
@@ -102,33 +104,33 @@ class AcademicService {
   // ── DROPDOWN HELPERS ──────────────────────────────────
   Future<List<Map<String, dynamic>>> fetchStudentsForDropdown() async {
     try {
-      const sql = "SELECT id, nis, name as nama, class_id as kelas_id FROM students WHERE is_active = 1 ORDER BY name";
+      const sql = "SELECT id, nis, nama, kelas_id FROM students WHERE is_active = 1 ORDER BY nama";
       final results = await _d1Service.query(sql);
       return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      print("Error fetchStudentsForDropdown: $e");
+      debugPrint("Error fetchStudentsForDropdown: $e");
       return [];
     }
   }
 
   Future<List<Map<String, dynamic>>> fetchTeachersForDropdown() async {
     try {
-      const sql = "SELECT id, nip, name as nama FROM teachers ORDER BY name";
+      const sql = "SELECT id, nip, nama FROM teachers ORDER BY nama";
       final results = await _d1Service.query(sql);
       return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      print("Error fetchTeachersForDropdown: $e");
+      debugPrint("Error fetchTeachersForDropdown: $e");
       return [];
     }
   }
 
   Future<List<Map<String, dynamic>>> fetchClassesForDropdown() async {
     try {
-      const sql = "SELECT id, name as nama FROM classes ORDER BY name";
+      const sql = "SELECT id, nama FROM classes ORDER BY nama";
       final results = await _d1Service.query(sql);
       return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      print("Error fetchClassesForDropdown: $e");
+      debugPrint("Error fetchClassesForDropdown: $e");
       return [];
     }
   }

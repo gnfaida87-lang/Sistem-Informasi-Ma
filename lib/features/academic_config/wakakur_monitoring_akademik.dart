@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/network/d1_service.dart';
 
 class WakakurMonitoringAkademik extends StatefulWidget {
   const WakakurMonitoringAkademik({super.key});
@@ -8,7 +9,103 @@ class WakakurMonitoringAkademik extends StatefulWidget {
 }
 
 class _WakakurMonitoringAkademikState extends State<WakakurMonitoringAkademik> {
+  final _d1Service = D1Service();
   String _selectedSemester = 'Ganjil 2025/2026';
+  bool _isLoading = true;
+
+  List<Map<String, dynamic>> _gradeProgress = [];
+  List<Map<String, dynamic>> _pendingTeachers = [];
+  List<Map<String, dynamic>> _pendingAttendance = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMonitoringData();
+  }
+
+  Future<void> _fetchMonitoringData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final progressSql = """
+        SELECT 
+          sub.nama as mapel, 
+          cls.nama as kelas,
+          COUNT(DISTINCT sg.student_id) as graded_count,
+          (SELECT COUNT(*) FROM students st WHERE st.kelas_id = cls.id AND st.is_active = 1) as total_students,
+          sg.type as tipe_nilai
+        FROM teaching_schedules ts
+        JOIN subjects sub ON ts.subject_id = sub.id
+        JOIN classes cls ON ts.class_id = cls.id
+        LEFT JOIN student_grades sg ON sg.subject_id = sub.id 
+             AND sg.student_id IN (SELECT id FROM students WHERE kelas_id = cls.id)
+        GROUP BY sub.id, cls.id, sg.type
+        ORDER BY cls.nama, sub.nama
+      """;
+      final progress = await _d1Service.query(progressSql);
+
+      final progressMap = <String, Map<String, dynamic>>{};
+      for (var row in progress) {
+        final key = "${row['mapel']}_${row['kelas']}";
+        if (!progressMap.containsKey(key)) {
+          progressMap[key] = {
+            'mapel': row['mapel'],
+            'kelas': row['kelas'],
+            'total_students': row['total_students'],
+            'uh': 0.0,
+            'pts': 0.0,
+            'pas': 0.0,
+          };
+        }
+        final count = (row['graded_count'] as num).toDouble();
+        final total = (row['total_students'] as num).toDouble();
+        final pct = total > 0 ? (count / total * 100) : 0.0;
+        
+        final tipe = row['tipe_nilai']?.toString().toUpperCase() ?? '';
+        if (tipe == 'UH') progressMap[key]!['uh'] = pct;
+        else if (tipe == 'PTS') progressMap[key]!['pts'] = pct;
+        else if (tipe == 'PAS') progressMap[key]!['pas'] = pct;
+      }
+
+      final pendingSql = """
+        SELECT t.nama as guru, s.nama as mapel, c.nama as kelas
+        FROM teaching_schedules ts
+        JOIN teachers t ON ts.teacher_id = t.id
+        JOIN subjects s ON ts.subject_id = s.id
+        JOIN classes c ON ts.class_id = c.id
+        WHERE NOT EXISTS (
+          SELECT 1 FROM student_grades sg 
+          WHERE sg.subject_id = s.id 
+          AND sg.student_id IN (SELECT id FROM students WHERE kelas_id = c.id)
+        )
+      """;
+      final pendingTeachers = await _d1Service.query(pendingSql);
+
+      final today = DateTime.now().toIso8601String().split('T').first;
+      final attendanceSql = """
+        SELECT c.nama as kelas, t.nama as wali_kelas
+        FROM classes c
+        JOIN teachers t ON c.wali_kelas_id = t.id
+        WHERE NOT EXISTS (
+          SELECT 1 FROM attendance a 
+          WHERE a.class_id = c.id AND a.date = ?
+        )
+      """;
+      final pendingAttendance = await _d1Service.query(attendanceSql, params: [today]);
+
+      if (mounted) {
+        setState(() {
+          _gradeProgress = progressMap.values.toList();
+          _pendingTeachers = List<Map<String, dynamic>>.from(pendingTeachers);
+          _pendingAttendance = List<Map<String, dynamic>>.from(pendingAttendance);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error monitoring: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,20 +116,19 @@ class _WakakurMonitoringAkademikState extends State<WakakurMonitoringAkademik> {
         children: [
           Row(
             children: [
-              Column(
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Monitoring Akademik',
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2B3674)),
                   ),
-                  const SizedBox(height: 8),
-                  const Text('Pantau kepatuhan input data guru & progres akademik secara real-time.', 
+                  SizedBox(height: 8),
+                  Text('Pantau kepatuhan input data guru & progres akademik secara real-time.', 
                     style: TextStyle(color: Colors.grey, fontSize: 13)),
                 ],
               ),
               const Spacer(),
-              // SEMESTER SELECTOR
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade100)),
@@ -54,39 +150,42 @@ class _WakakurMonitoringAkademikState extends State<WakakurMonitoringAkademik> {
           ),
           const SizedBox(height: 24),
 
-          // 1. PROGRESS PENILAIAN (WIDE TABLE)
-          _buildSectionHeader('Progress Input Nilai & Ketuntasan per Kategori', Icons.analytics_outlined, Colors.blue),
-          _buildProgressPenilaianTable(),
-          const SizedBox(height: 32),
-
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 2. GURU BELUM INPUT NILAI
-              Expanded(
-                flex: 1,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionHeader('Guru Belum Input Nilai', Icons.pending_actions, Colors.red),
-                    _buildGuruBelumInputTable(),
-                  ],
+          if (_isLoading)
+            const Center(child: Padding(
+              padding: EdgeInsets.all(50.0),
+              child: CircularProgressIndicator(),
+            ))
+          else ...[
+            _buildSectionHeader('Progress Input Nilai & Ketuntasan per Kategori', Icons.analytics_outlined, Colors.blue),
+            _buildProgressPenilaianTable(),
+            const SizedBox(height: 32),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionHeader('Guru Belum Input Nilai', Icons.pending_actions, Colors.red),
+                      _buildGuruBelumInputTable(),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 24),
-              // 3. KELAS BELUM ABSENSI
-              Expanded(
-                flex: 1,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionHeader('Kelas Belum Absensi Hari Ini', Icons.event_busy, Colors.orange),
-                    _buildKelasBelumAbsensiTable(),
-                  ],
+                const SizedBox(width: 24),
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionHeader('Kelas Belum Absensi Hari Ini', Icons.event_busy, Colors.orange),
+                      _buildKelasBelumAbsensiTable(),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -132,46 +231,27 @@ class _WakakurMonitoringAkademikState extends State<WakakurMonitoringAkademik> {
             DataColumn(label: Text('PAS / UAS', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(label: Text('Status Akhir', style: TextStyle(fontWeight: FontWeight.bold))),
           ],
-          rows: [
-            _buildProgressRow('Matematika', 'X IPA 1', '98%', 'A', '90%', '100%', '0%', 75, Colors.blue),
-            _buildProgressRow('B. Indonesia', 'XI IPS 2', '100%', 'B+', '100%', '100%', '100%', 100, Colors.green),
-            _buildProgressRow('Fisika', 'XII IPA 1', '85%', 'B', '40%', '0%', '0%', 25, Colors.orange),
-            _buildProgressRow('Sejarah', 'X IPS 1', '95%', 'A-', '100%', '100%', '0%', 80, Colors.blue),
-          ],
+          rows: _gradeProgress.map((p) {
+            double avg = ((p['uh'] ?? 0) + (p['pts'] ?? 0) + (p['pas'] ?? 0)) / 3;
+            Color color = avg > 80 ? Colors.green : (avg > 50 ? Colors.orange : Colors.red);
+            return DataRow(cells: [
+              DataCell(Text(p['mapel'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataCell(Text(p['kelas'] ?? '-')),
+              const DataCell(Text('100%', style: TextStyle(color: Colors.green))),
+              const DataCell(Text('Lengkap', style: TextStyle(color: Colors.blue))),
+              DataCell(Text('${(p['uh'] ?? 0).toInt()}%')),
+              DataCell(Text('${(p['pts'] ?? 0).toInt()}%')),
+              DataCell(Text('${(p['pas'] ?? 0).toInt()}%')),
+              DataCell(Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                child: Text(avg > 50 ? 'Berjalan' : 'Kritis', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11)),
+              )),
+            ]);
+          }).toList(),
         ),
       ),
     );
-  }
-
-  DataRow _buildProgressRow(String mapel, String kelas, String absensi, String sikap, String uh, String pts, String pas, double progress, Color color) {
-    return DataRow(cells: [
-      DataCell(Text(mapel, style: const TextStyle(fontWeight: FontWeight.bold))),
-      DataCell(Text(kelas)),
-      DataCell(Text(absensi, style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold))),
-      DataCell(Text(sikap, style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.bold))),
-      DataCell(Text(uh)),
-      DataCell(Text(pts)),
-      DataCell(Text(pas)),
-      DataCell(
-        Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${progress.toInt()}%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
-            const SizedBox(height: 4),
-            SizedBox(
-              width: 100,
-              child: LinearProgressIndicator(
-                value: progress / 100,
-                backgroundColor: color.withOpacity(0.1),
-                color: color,
-                minHeight: 4,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ]);
   }
 
   Widget _buildGuruBelumInputTable() {
@@ -186,10 +266,13 @@ class _WakakurMonitoringAkademikState extends State<WakakurMonitoringAkademik> {
         children: [
           _buildSimpleRow('Nama Guru', 'Mata Pelajaran', 'Ket.', isHeader: true),
           const Divider(),
-          _buildSimpleRow('Ahmad Fauzi, S.Pd', 'Matematika - X IPA 1', 'PAS Belum', color: Colors.red),
-          _buildSimpleRow('Lina Marlina, S.Si', 'Biologi - XI IPA 2', 'Tugas 4 Belum', color: Colors.orange),
-          _buildSimpleRow('Drs. Joko Susilo', 'Sejarah - XII IPS 1', 'PH 2 Belum', color: Colors.orange),
-          _buildSimpleRow('Rina Fitriani, M.Pd', 'B. Inggris - X IPS 2', 'PTS Belum', color: Colors.red),
+          if (_pendingTeachers.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: Text('Belum ada guru yang perlu dipantau.', style: TextStyle(fontSize: 12, color: Colors.grey))),
+            )
+          else
+            ..._pendingTeachers.map((t) => _buildSimpleRow(t['guru'] ?? '-', t['mapel'] ?? '-', t['kelas'] ?? '-', color: Colors.red)),
         ],
       ),
     );
@@ -207,9 +290,13 @@ class _WakakurMonitoringAkademikState extends State<WakakurMonitoringAkademik> {
         children: [
           _buildSimpleRow('Kelas', 'Wali Kelas', 'Status', isHeader: true),
           const Divider(),
-          _buildSimpleRow('X IPA 2', 'H. Muhidin', 'Belum Absen', color: Colors.red),
-          _buildSimpleRow('XI IPS 3', 'Siti Aminah', 'Belum Absen', color: Colors.red),
-          _buildSimpleRow('XII IPA 2', 'Budi Santoso', 'Belum Absen', color: Colors.red),
+          if (_pendingAttendance.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: Text('Seluruh kelas sudah melakukan absensi.', style: TextStyle(fontSize: 12, color: Colors.grey))),
+            )
+          else
+            ..._pendingAttendance.map((a) => _buildSimpleRow(a['kelas'] ?? '-', a['wali_kelas'] ?? '-', 'BELUM', color: Colors.orange)),
           const SizedBox(height: 12),
           ElevatedButton.icon(
             onPressed: null,

@@ -1,20 +1,97 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_settings.dart';
+import '../../core/network/d1_service.dart';
+import '../../core/providers/academic_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class WakakurRapor extends StatefulWidget {
+class WakakurRapor extends ConsumerStatefulWidget {
   const WakakurRapor({super.key});
 
   @override
-  State<WakakurRapor> createState() => _WakakurRaporState();
+  ConsumerState<WakakurRapor> createState() => _WakakurRaporState();
 }
 
-class _WakakurRaporState extends State<WakakurRapor> with SingleTickerProviderStateMixin {
+class _WakakurRaporState extends ConsumerState<WakakurRapor> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final _d1Service = D1Service();
+  
+  String? _selectedLegerClassId;
+  List<Map<String, dynamic>> _availableClasses = [];
+  List<String> _legerSubjects = [];
+  List<Map<String, dynamic>> _legerData = [];
+  bool _isLegerLoading = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadAvailableClasses();
+  }
+
+  Future<void> _loadAvailableClasses() async {
+    try {
+      final results = await _d1Service.query("SELECT id, nama FROM classes ORDER BY nama ASC");
+      setState(() {
+        _availableClasses = results.cast<Map<String, dynamic>>();
+        if (_availableClasses.isNotEmpty) {
+          _selectedLegerClassId = _availableClasses.first['id'];
+          _fetchLegerData();
+        }
+      });
+    } catch (e) {
+      debugPrint("Error loading classes: $e");
+    }
+  }
+
+  Future<void> _fetchLegerData() async {
+    if (_selectedLegerClassId == null) return;
+    setState(() => _isLegerLoading = true);
+    
+    try {
+      // 1. Ambil Mapel yang diajarkan di kelas ini
+      final subjectResults = await _d1Service.query(
+        "SELECT DISTINCT s.nama FROM teaching_schedules ts JOIN subjects s ON ts.subject_id = s.id WHERE ts.class_id = ?",
+        params: [_selectedLegerClassId]
+      );
+      final subjects = subjectResults.map((e) => e['nama'].toString()).toList();
+
+      // 2. Ambil Siswa dan Nilai Rata-rata per Mapel
+      // Logika: Ambil rata-rata nilai UH, PTS, PAS untuk setiap mapel
+      final legerSql = """
+        SELECT 
+          st.nama as nama_siswa,
+          sub.nama as nama_mapel,
+          AVG(sg.nilai) as nilai_rata
+        FROM students st
+        JOIN teaching_schedules ts ON ts.class_id = st.kelas_id
+        JOIN subjects sub ON ts.subject_id = sub.id
+        LEFT JOIN student_grades sg ON sg.student_id = st.id AND sg.subject_id = sub.id
+        WHERE st.kelas_id = ?
+        GROUP BY st.id, sub.id
+        ORDER BY st.nama ASC
+      """;
+      
+      final results = await _d1Service.query(legerSql, params: [_selectedLegerClassId]);
+      
+      // Transform data ke format Leger (Satu baris per siswa)
+      final Map<String, Map<String, dynamic>> pivotData = {};
+      for (var row in results) {
+        final studentName = row['nama_siswa'];
+        if (!pivotData.containsKey(studentName)) {
+          pivotData[studentName] = {'nama': studentName};
+        }
+        pivotData[studentName]![row['nama_mapel']] = (row['nilai_rata'] ?? 0.0);
+      }
+
+      setState(() {
+        _legerSubjects = subjects;
+        _legerData = pivotData.values.toList();
+        _isLegerLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Error fetching leger: $e");
+      setState(() => _isLegerLoading = false);
+    }
   }
 
   @override
@@ -114,10 +191,10 @@ class _WakakurRaporState extends State<WakakurRapor> with SingleTickerProviderSt
           ),
         ),
         const SizedBox(height: 24),
-        _buildClassGenerateCard('X IPA 1', 32, 100, true),
-        _buildClassGenerateCard('X IPA 2', 30, 95, false),
-        _buildClassGenerateCard('XI IPS 1', 35, 100, true),
-        _buildClassGenerateCard('XII IPA 1', 28, 80, false),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(child: Text('Belum ada kelas yang siap generate rapor.', style: TextStyle(color: Colors.grey))),
+        ),
       ],
     );
   }
@@ -240,28 +317,8 @@ class _WakakurRaporState extends State<WakakurRapor> with SingleTickerProviderSt
             ],
           ),
         ),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            itemCount: 5,
-            separatorBuilder: (context, index) => const Divider(),
-            itemBuilder: (context, index) {
-              final names = ['Ahmad Rizal Fachry', 'Nadia Safira', 'Fauzan Adzima', 'Siti Aminah', 'Budi Santoso'];
-              return ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.person)),
-                title: Text(names[index], style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Kelas X IPA 1 • Rapor Semester Ganjil'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextButton(onPressed: () => _showPreviewRapor(names[index]), child: const Text('Preview')),
-                    const SizedBox(width: 8),
-                    ElevatedButton(onPressed: null, child: const Text('Sahkan')),
-                  ],
-                ),
-              );
-            },
-          ),
+        const Expanded(
+          child: Center(child: Text('Tidak ada rapor yang menunggu validasi.', style: TextStyle(color: Colors.grey))),
         ),
       ],
     );
@@ -363,14 +420,26 @@ class _WakakurRaporState extends State<WakakurRapor> with SingleTickerProviderSt
           padding: const EdgeInsets.all(24),
           child: Row(
             children: [
-              DropdownButton<String>(
-                value: 'X IPA 1',
-                items: ['X IPA 1', 'X IPA 2', 'XI IPA 1'].map((e) => DropdownMenuItem(value: e, child: Text('Pilih Kelas: $e'))).toList(),
-                onChanged: (val) {},
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedLegerClassId,
+                    items: _availableClasses.map((e) => DropdownMenuItem(value: e['id'].toString(), child: Text('Kelas: ${e['nama']}'))).toList(),
+                    onChanged: (val) {
+                      setState(() => _selectedLegerClassId = val);
+                      _fetchLegerData();
+                    },
+                    style: const TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ),
+              const SizedBox(width: 16),
+              if (_isLegerLoading) const CircularProgressIndicator(strokeWidth: 2),
               const Spacer(),
               ElevatedButton.icon(
-                onPressed: null,
+                onPressed: _legerData.isEmpty ? null : () {}, // Implement Excel Export later
                 icon: const Icon(Icons.download),
                 label: const Text('Export Excel'),
               ),
@@ -378,42 +447,45 @@ class _WakakurRaporState extends State<WakakurRapor> with SingleTickerProviderSt
           ),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: DataTable(
-                headingRowColor: MaterialStateProperty.all(Colors.grey.shade100),
-                border: TableBorder.all(color: Colors.grey.shade300),
-                columns: const [
-                  DataColumn(label: Text('No')),
-                  DataColumn(label: Text('Nama Siswa')),
-                  DataColumn(label: Text('MTK')),
-                  DataColumn(label: Text('BIN')),
-                  DataColumn(label: Text('BIG')),
-                  DataColumn(label: Text('FIS')),
-                  DataColumn(label: Text('KIM')),
-                  DataColumn(label: Text('BIO')),
-                  DataColumn(label: Text('RATA2')),
-                  DataColumn(label: Text('Ranking')),
-                ],
-                rows: List.generate(10, (index) => DataRow(
-                  cells: [
-                    DataCell(Text('${index + 1}')),
-                    DataCell(Text('Siswa Ke-${index + 1}')),
-                    const DataCell(Text('85')),
-                    const DataCell(Text('88')),
-                    const DataCell(Text('90')),
-                    const DataCell(Text('82')),
-                    const DataCell(Text('84')),
-                    const DataCell(Text('89')),
-                    const DataCell(Text('86.3', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataCell(Text('${index + 1}')),
-                  ],
-                )),
+          child: _legerData.isEmpty && !_isLegerLoading
+            ? const Center(child: Text('Tidak ada data nilai untuk kelas ini.'))
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: DataTable(
+                    headingRowColor: MaterialStateProperty.all(Colors.teal.shade50),
+                    border: TableBorder.all(color: Colors.grey.shade200),
+                    columns: [
+                      const DataColumn(label: Text('No', style: TextStyle(fontWeight: FontWeight.bold))),
+                      const DataColumn(label: Text('Nama Siswa', style: TextStyle(fontWeight: FontWeight.bold))),
+                      ..._legerSubjects.map((s) => DataColumn(label: Text(s, style: const TextStyle(fontWeight: FontWeight.bold)))),
+                      const DataColumn(label: Text('RATA2', style: TextStyle(fontWeight: FontWeight.bold))),
+                    ],
+                    rows: List.generate(_legerData.length, (index) {
+                      final student = _legerData[index];
+                      double total = 0;
+                      int count = 0;
+                      
+                      return DataRow(
+                        cells: [
+                          DataCell(Text('${index + 1}')),
+                          DataCell(Text(student['nama'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold))),
+                          ..._legerSubjects.map((s) {
+                            final score = (student[s] ?? 0.0) as double;
+                            if (score > 0) {
+                              total += score;
+                              count++;
+                            }
+                            return DataCell(Text(score > 0 ? score.toStringAsFixed(1) : '-'));
+                          }),
+                          DataCell(Text(count > 0 ? (total / count).toStringAsFixed(1) : '0.0', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))),
+                        ],
+                      );
+                    }),
+                  ),
+                ),
               ),
-            ),
-          ),
         ),
       ],
     );

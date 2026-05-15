@@ -19,6 +19,9 @@ class _IntegrationScreenState extends ConsumerState<IntegrationScreen> with Safe
   final _guruEngineController = TextEditingController();
   final _belajarEngineController = TextEditingController();
   
+  final _gdriveKeyController = TextEditingController();
+  final _gdriveFolderController = TextEditingController();
+  
   bool _isInitialized = false;
 
   @override
@@ -47,6 +50,9 @@ class _IntegrationScreenState extends ConsumerState<IntegrationScreen> with Safe
 
       _guruEngineController.text = settings.guruAiEngine ?? 'OpenAI (GPT-4o)';
       _belajarEngineController.text = settings.belajarAiEngine ?? 'Gemini (1.5 Pro)';
+      
+      _gdriveKeyController.text = settings.gdriveApiKey ?? '';
+      _gdriveFolderController.text = settings.gdriveFolderId ?? '';
       
       _isInitialized = true;
     });
@@ -81,6 +87,8 @@ class _IntegrationScreenState extends ConsumerState<IntegrationScreen> with Safe
     }
     _guruEngineController.dispose();
     _belajarEngineController.dispose();
+    _gdriveKeyController.dispose();
+    _gdriveFolderController.dispose();
     super.dispose();
   }
 
@@ -96,6 +104,7 @@ class _IntegrationScreenState extends ConsumerState<IntegrationScreen> with Safe
 
     final newSettings = SystemSettings(
       schoolName: currentSettings.schoolName,
+      appName: currentSettings.appName,
       headmasterName: currentSettings.headmasterName,
       logoUrl: currentSettings.logoUrl,
       faviconUrl: currentSettings.faviconUrl,
@@ -103,6 +112,9 @@ class _IntegrationScreenState extends ConsumerState<IntegrationScreen> with Safe
       guruAiEngine: _guruEngineController.text.trim(),
       belajarAiKeys: belajarKeys,
       belajarAiEngine: _belajarEngineController.text.trim(),
+      gdriveApiKey: _gdriveKeyController.text.trim(),
+      gdriveFolderId: _gdriveFolderController.text.trim(),
+      isMaintenance: currentSettings.isMaintenance,
     );
 
     await safeCall(
@@ -167,6 +179,9 @@ class _IntegrationScreenState extends ConsumerState<IntegrationScreen> with Safe
                         _belajarKeyControllers,
                         _belajarEngineController,
                       ),
+
+                      const SizedBox(height: 32),
+                      _buildGDriveSection(),
                       
                       const SizedBox(height: 40),
                       _buildSaveButton(),
@@ -311,10 +326,48 @@ class _IntegrationScreenState extends ConsumerState<IntegrationScreen> with Safe
               children: [
                 Icon(Icons.save_rounded),
                 SizedBox(width: 12),
-                Text('Simpan & Sinkronkan Konfigurasi AI', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('Simpan & Sinkronkan Konfigurasi', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ],
             ),
       ),
+    );
+  }
+
+  Widget _buildGDriveSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Google Drive Storage', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
+        const SizedBox(height: 4),
+        Text('Digunakan untuk menyimpan Foto Profil dan Logo Sekolah.', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _gdriveKeyController,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: 'Google Cloud API Key',
+            hintText: 'AIzaSy...',
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade200)),
+            prefixIcon: const Icon(Icons.cloud_queue, size: 20),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _gdriveFolderController,
+          decoration: InputDecoration(
+            labelText: 'Google Drive Folder ID',
+            hintText: '1abc234...',
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade200)),
+            prefixIcon: const Icon(Icons.folder_open, size: 20),
+          ),
+        ),
+      ],
     );
   }
 }

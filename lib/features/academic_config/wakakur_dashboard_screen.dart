@@ -12,7 +12,8 @@ import 'wakakur_monitoring_akademik.dart';
 import 'wakakur_rapor.dart';
 import 'wakakur_kenaikan.dart';
 import 'wakakur_laporan_bimbel.dart';
-import '../../shared/widgets/profile_settings_screen.dart';
+import '../../shared/widgets/shared_top_bar.dart';
+import '../../shared/widgets/shared_sidebar.dart';
 
 class WakakurDashboardScreen extends ConsumerStatefulWidget {
   const WakakurDashboardScreen({super.key});
@@ -40,17 +41,22 @@ class _WakakurDashboardScreenState extends ConsumerState<WakakurDashboardScreen>
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 800;
-    final systemSettings = ref.watch(systemSettingsProvider).value;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FE),
       body: Row(
         children: [
-          if (isDesktop) _buildSidebar(systemSettings?.schoolName ?? 'SI Madrasah'),
+          if (isDesktop) 
+            SharedSidebar(
+              selectedIndex: _selectedIndex,
+              menuItems: _menuItems,
+              onItemSelected: (index) => setState(() => _selectedIndex = index),
+              accentColor: Colors.teal.shade700,
+            ),
           Expanded(
             child: Column(
               children: [
-                _buildTopBar(isDesktop),
+                SharedTopBar(title: _menuItems[_selectedIndex]['title']),
                 Expanded(
                   child: ClipRRect(
                     borderRadius: const BorderRadius.only(
@@ -67,144 +73,14 @@ class _WakakurDashboardScreenState extends ConsumerState<WakakurDashboardScreen>
           ),
         ],
       ),
-      drawer: !isDesktop ? Drawer(child: _buildSidebar(systemSettings?.schoolName ?? 'SI Madrasah')) : null,
-    );
-  }
-
-  Widget _buildSidebar(String schoolName) {
-    return Container(
-      width: 250,
-      color: Colors.white,
-      child: Column(
-        children: [
-          Container(
-            height: 70,
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.teal.shade500,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.school, color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    schoolName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2B3674),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _menuItems.length,
-              itemBuilder: (context, index) {
-                final isSelected = _selectedIndex == index;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                  child: InkWell(
-                    onTap: () {
-                      setState(() => _selectedIndex = index);
-                      if (MediaQuery.of(context).size.width <= 800) {
-                        Navigator.pop(context);
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isSelected ? Colors.teal.shade50 : Colors.transparent,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _menuItems[index]['icon'],
-                            color: isSelected ? Colors.teal.shade600 : Colors.grey.shade500,
-                            size: 22,
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              _menuItems[index]['title'],
-                              style: TextStyle(
-                                color: isSelected ? Colors.teal.shade800 : Colors.grey.shade600,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                fontSize: 13,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopBar(bool isDesktop) {
-    return Container(
-      height: 70,
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          if (!isDesktop)
-            IconButton(
-              icon: const Icon(Icons.menu, color: Colors.grey),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-          const Spacer(),
-          ElevatedButton.icon(
-            onPressed: () => _syncData(),
-            icon: const Icon(Icons.sync, size: 18),
-            label: const Text('Sinkronkan Data'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal.shade50,
-              foregroundColor: Colors.teal.shade700,
-              elevation: 0,
-            ),
-          ),
-          const SizedBox(width: 24),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Text('Wakil Kurikulum', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2B3674))),
-              Text('SI Madrasah', style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(width: 12),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.red),
-            onPressed: () {
-              ref.read(authProvider.notifier).logout();
-              context.go(AppRoutes.login);
-            },
-          ),
-        ],
-      ),
+      drawer: !isDesktop ? Drawer(
+        child: SharedSidebar(
+          selectedIndex: _selectedIndex,
+          menuItems: _menuItems,
+          onItemSelected: (index) => setState(() => _selectedIndex = index),
+          accentColor: Colors.teal.shade700,
+        ),
+      ) : null,
     );
   }
 

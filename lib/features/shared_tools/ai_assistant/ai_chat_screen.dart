@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/services/ai_service.dart';
 
 class AIChatScreen extends StatefulWidget {
   final String assistantName; // e.g., "Sahabat Belajar" or "Sahabat Guru"
@@ -17,6 +18,8 @@ class AIChatScreen extends StatefulWidget {
 class _AIChatScreenState extends State<AIChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final List<Map<String, dynamic>> _messages = [];
+  final AIService _aiService = AIService();
+  bool _isTyping = false;
 
   @override
   void initState() {
@@ -27,36 +30,50 @@ class _AIChatScreenState extends State<AIChatScreen> {
     });
   }
 
-  void _sendMessage() {
-    if (_controller.text.trim().isEmpty) return;
+  Future<void> _sendMessage() async {
+    if (_controller.text.trim().isEmpty || _isTyping) return;
     
+    final userText = _controller.text.trim();
+    _controller.clear();
+
     setState(() {
       _messages.add({
         'role': 'user',
-        'text': _controller.text,
+        'text': userText,
       });
-      
-      // Simulating AI Response after a delay
-      String userText = _controller.text.toLowerCase();
-      _controller.clear();
-      
-      Future.delayed(const Duration(seconds: 1), () {
-        if (!mounted) return;
-        setState(() {
-          String response = 'Tentu, saya bisa membantu Anda terkait hal tersebut. Apakah ada detail spesifik yang ingin Anda tanyakan?';
-          if (userText.contains('halo') || userText.contains('hi')) {
-            response = 'Halo juga! Senang bisa menyapa Anda.';
-          } else if (userText.contains('terima kasih')) {
-            response = 'Sama-sama! Senang bisa membantu.';
-          }
-          
-          _messages.add({
-            'role': 'assistant',
-            'text': response,
-          });
-        });
-      });
+      _isTyping = true;
     });
+
+    try {
+      // Ambil riwayat singkat (misal 5 pesan terakhir)
+      final history = _messages.length > 1 
+          ? _messages.sublist(1, _messages.length - 1) 
+          : <Map<String, dynamic>>[];
+
+      final response = await _aiService.getChatResponse(
+        assistantName: widget.assistantName,
+        prompt: userText,
+        history: history,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _messages.add({
+          'role': 'assistant',
+          'text': response,
+        });
+        _isTyping = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add({
+          'role': 'assistant',
+          'text': "Maaf, terjadi kendala koneksi. Silakan coba lagi nanti.",
+        });
+        _isTyping = false;
+      });
+    }
   }
 
   @override
@@ -72,8 +89,33 @@ class _AIChatScreenState extends State<AIChatScreen> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
+              itemCount: _messages.length + (_isTyping ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == _messages.length) {
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: widget.themeColor),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('Sedang mengetik...', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        ],
+                      ),
+                    ),
+                  );
+                }
                 bool isUser = _messages[index]['role'] == 'user';
                 return Align(
                   alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,

@@ -1,16 +1,90 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
+import '../../core/providers/auth_provider.dart';
+import '../../core/providers/system_provider.dart';
+import '../../core/network/d1_service.dart';
+import '../../core/utils/context_extensions.dart';
 
-class ProfileSettingsScreen extends StatefulWidget {
+class ProfileSettingsScreen extends ConsumerStatefulWidget {
   const ProfileSettingsScreen({super.key});
 
   @override
-  State<ProfileSettingsScreen> createState() => _ProfileSettingsScreenState();
+  ConsumerState<ProfileSettingsScreen> createState() => _ProfileSettingsScreenState();
 }
 
-class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
-  final _usernameController = TextEditingController(text: 'user_aktif');
+class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
+  late TextEditingController _usernameController;
   final _passwordController = TextEditingController();
   bool _isObscure = true;
+  String? _profileUrl;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = ref.read(authProvider).user;
+    _usernameController = TextEditingController(text: user?.fullName ?? '');
+    _profileUrl = user?.profileUrl;
+  }
+
+  Future<void> _pickAndUploadPhoto() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+
+    if (result != null && result.files.first.bytes != null) {
+      setState(() => _isLoading = true);
+      final file = result.files.first;
+      
+      try {
+        final d1 = D1Service();
+        final uploadResult = await d1.uploadFile(
+          file.bytes!,
+          'profile_${ref.read(authProvider).user?.id}_${DateTime.now().millisecondsSinceEpoch}.${file.extension}',
+        );
+
+        if (uploadResult['success'] == true) {
+          setState(() {
+            _profileUrl = uploadResult['fileUrl'];
+          });
+          if (mounted) context.showSuccessSnackBar('Foto profil berhasil diunggah!');
+        } else {
+          if (mounted) context.showErrorSnackBar('Gagal mengunggah: ${uploadResult['message']}');
+        }
+      } catch (e) {
+        if (mounted) context.showErrorSnackBar('Gagal mengunggah: $e');
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _saveChanges() async {
+    setState(() => _isLoading = true);
+    try {
+      final user = ref.read(authProvider).user;
+      if (user == null) return;
+
+      final d1Service = D1Service();
+      await d1Service.query(
+        "UPDATE users SET full_name = ?, profile_url = ? WHERE id = ?",
+        params: [_usernameController.text, _profileUrl, user.id],
+      );
+
+      // Invalidate auth provider to refresh user data if necessary
+      // Or just show success
+      if (mounted) {
+        context.showSuccessSnackBar('Profil berhasil diperbarui!');
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      context.showErrorSnackBar('Gagal menyimpan perubahan: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,16 +131,19 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                           color: Colors.grey.shade100,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.grey.shade300, width: 2),
+                          image: _profileUrl != null 
+                            ? DecorationImage(image: NetworkImage(_profileUrl!), fit: BoxFit.cover)
+                            : null,
                         ),
-                        child: Icon(Icons.person, size: 50, color: Colors.grey.shade400),
+                        child: _profileUrl == null 
+                          ? Icon(Icons.person, size: 50, color: Colors.grey.shade400)
+                          : null,
                       ),
                       Positioned(
                         bottom: 0,
                         right: 0,
                         child: InkWell(
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dialog Upload Foto Terbuka (Mockup)')));
-                          },
+                          onTap: _isLoading ? null : _pickAndUploadPhoto,
                           child: Container(
                             padding: const EdgeInsets.all(6),
                             decoration: const BoxDecoration(
@@ -129,13 +206,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Pengaturan berhasil disimpan!'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating),
-                      );
-                      Navigator.pop(context); // Kembali ke dashboard masing-masing setelah simpan
-                    },
-                    icon: const Icon(Icons.save),
+                    onPressed: _isLoading ? null : _saveChanges,
+                    icon: _isLoading 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.save),
                     label: const Text('Simpan Perubahan'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue.shade700,

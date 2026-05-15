@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/system_provider.dart';
 
-class SystemDashboardScreen extends StatelessWidget {
+class SystemDashboardScreen extends ConsumerWidget {
   const SystemDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statsAsync = ref.watch(dashboardStatsProvider);
+
     // Karena dipanggil dari Shell, kita tidak perlu Scaffold AppBar lagi
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // DUMMY BREADCRUMB
+          // BREADCRUMB
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -66,23 +70,27 @@ class SystemDashboardScreen extends StatelessWidget {
                       flex: 4,
                       child: Column(
                         children: [
-                          Row(
-                            children: [
-                              Expanded(child: _buildStatCard(Colors.pinkAccent, '0', 'Siswa Terdaftar', Icons.school)),
-                              const SizedBox(width: 16),
-                              Expanded(child: _buildStatCard(Colors.lightBlueAccent, '0', 'Guru Aktif', Icons.person)),
-                            ],
+                          statsAsync.when(
+                            data: (stats) => Row(
+                              children: [
+                                Expanded(child: _buildStatCard(Colors.pinkAccent, stats.totalStudents.toString(), 'Siswa Terdaftar', Icons.school)),
+                                const SizedBox(width: 16),
+                                Expanded(child: _buildStatCard(Colors.lightBlueAccent, stats.totalTeachers.toString(), 'Guru Aktif', Icons.person)),
+                              ],
+                            ),
+                            loading: () => const Center(child: LinearProgressIndicator()),
+                            error: (e, _) => Text('Error: $e'),
                           ),
                           const SizedBox(height: 16),
                           Row(
                             children: [
-                               Expanded(child: _buildStatCard(Colors.purpleAccent, '0', 'Pemasukan (Bulan)', Icons.attach_money)),
-                              const SizedBox(width: 16),
-                              Expanded(child: _buildStatCard(Colors.white, '99%', 'Server Uptime', Icons.dns, isLight: true)),
+                               Expanded(child: _buildStatCard(Colors.purpleAccent, 'Rp 0', 'Pemasukan (Bulan)', Icons.attach_money)),
+                               const SizedBox(width: 16),
+                               Expanded(child: _buildStatCard(Colors.white, '99.9%', 'Server Uptime', Icons.dns, isLight: true)),
                             ],
                           ),
                           const SizedBox(height: 16),
-                          // "Create CRM Reports" Banner
+                          // "Update Sistem" Banner
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.all(24),
@@ -109,6 +117,7 @@ class SystemDashboardScreen extends StatelessWidget {
               );
             },
           ),
+
           const SizedBox(height: 24),
 
           // BOTTOM SECTION SECARA ROW
@@ -271,21 +280,6 @@ class SystemDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _userListItem(String name, String role, Color bgColor) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        children: [
-          const CircleAvatar(backgroundColor: Colors.white, radius: 18, child: Icon(Icons.person, size: 20)),
-          const SizedBox(width: 12),
-          Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-          Text(role, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-        ],
-      ),
-    );
-  }
 
   Widget _buildSalesDonut() {
     return Container(

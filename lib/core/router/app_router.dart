@@ -84,7 +84,7 @@ class AppRoutes {
       case 'op': return operator_;    // Operator
       case 'ak': return keuangan;     // Admin Keuangan
       case 'gm': return isWaliKelas ? guruWaliKelas : guru; // Guru Mapel
-      case 'gb': return bimbel;       // Guru BK/Bimbel
+      case 'gb': return bimbel;       // Guru Bimbel/Bimbel
       case 'ot': return orangTua;     // Orang Tua
 
       default:   return login;

@@ -114,13 +114,8 @@ class _OperatorMasterTahunAjaranState extends ConsumerState<OperatorMasterTahunA
       successMessage: 'Tahun Ajaran Berhasil Diaktifkan',
       action: () async {
         final service = ref.read(masterServiceProvider);
-        // Deactivate all others first (ideally in a transaction or special method)
-        // For now, just update this one
-        await service.updateAcademicYear(AcademicYear(
-          id: academicYear.id,
-          year: academicYear.year,
-          isActive: !academicYear.isActive,
-        ));
+        // Menggunakan fungsi eksklusif: aktifkan satu, matikan yang lain
+        await service.setActiveAcademicYear(academicYear.id);
         ref.invalidate(allAcademicYearsProvider);
       },
     );

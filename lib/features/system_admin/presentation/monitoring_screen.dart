@@ -1,7 +1,37 @@
 import 'package:flutter/material.dart';
+import '../../../core/network/d1_service.dart';
 
-class MonitoringScreen extends StatelessWidget {
+class MonitoringScreen extends StatefulWidget {
   const MonitoringScreen({super.key});
+
+  @override
+  State<MonitoringScreen> createState() => _MonitoringScreenState();
+}
+
+class _MonitoringScreenState extends State<MonitoringScreen> {
+  final _d1Service = D1Service();
+  bool _isLoading = true;
+  List<dynamic> _logs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLogs();
+  }
+
+  Future<void> _fetchLogs() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await _d1Service.query(
+        "SELECT * FROM audit_log ORDER BY performed_at DESC LIMIT 20"
+      );
+      setState(() => _logs = data as List);
+    } catch (e) {
+      debugPrint("Error fetching logs: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,53 +47,37 @@ class MonitoringScreen extends StatelessWidget {
               child: const Text('Monitoring Sistem', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
             ),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16.0),
-          children: [
-            _buildSectionHeader('Log Aktivitas & Audit Trail', Icons.history),
-            const SizedBox(height: 12),
-            _buildLogCard(
-              context,
-              'Perubahan Data Siswa',
-              'OPERATOR_DATA (Budi)',
-              'Berhasil mengedit NISN siswa Ahmad',
-              '2 Menit yang lalu',
-              Icons.edit_note,
-              Colors.blue,
-            ),
-            _buildLogCard(
-              context,
-              'Kenaikan Kelas Master',
-              'WAKIL_KURIKULUM (Siti)',
-              'Menjalankan pipeline kenaikan kelas ke Semester Ganjil 2025/2026',
-              '1 Jam yang lalu',
-              Icons.trending_up,
-              Colors.green,
-            ),
-            _buildLogCard(
-              context,
-              'Penghapusan User',
-              'SUPERADMIN (Anda)',
-              'Menghapus user id=xx-yy-zz secara permanen',
-              '1 Hari yang lalu',
-              Icons.delete_forever,
-              Colors.red,
-            ),
-            
-            const SizedBox(height: 24),
-            _buildSectionHeader('Pemantauan Keamanan', Icons.security),
-            const SizedBox(height: 12),
-            _buildLogCard(
-              context,
-              'Gagal Login (IP: 103.45.2.1)',
-              'SYSTEM_GUARD',
-              'Percobaan login gagal 5 kali berturut-turut pada akun Kepsek.',
-              '3 Hari yang lalu',
-              Icons.warning_amber_rounded,
-              Colors.orange,
-            ),
-          ],
-        ),
+              child: _isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : ListView(
+                    padding: const EdgeInsets.all(16.0),
+                    children: [
+                      _buildSectionHeader('Log Aktivitas & Audit Trail', Icons.history),
+                      const SizedBox(height: 12),
+                      if (_logs.isEmpty)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: Text('Belum ada aktivitas tercatat di database.', style: TextStyle(color: Colors.grey)),
+                          ),
+                        )
+                      else
+                        ..._logs.map((log) => _buildLogCard(
+                          context,
+                          log['action'] ?? 'Aksi',
+                          log['table_name'] ?? 'Sistem',
+                          log['description'] ?? '-',
+                          _formatTime(log['performed_at']),
+                          _getIconForAction(log['action']),
+                          _getColorForAction(log['action']),
+                        )),
+                      
+                      const SizedBox(height: 24),
+                      _buildSectionHeader('Pemantauan Keamanan', Icons.security),
+                      const SizedBox(height: 12),
+                      const Center(child: Text('Tidak ada ancaman keamanan terdeteksi.', style: TextStyle(fontSize: 12, color: Colors.grey))),
+                    ],
+                  ),
             ),
           ],
         ),
@@ -71,15 +85,34 @@ class MonitoringScreen extends StatelessWidget {
     );
   }
 
+  String _formatTime(String? time) {
+    if (time == null) return '-';
+    // Simple display for now
+    return time.split('.')[0].replaceAll('T', ' ');
+  }
+
+  IconData _getIconForAction(String? action) {
+    if (action == null) return Icons.info_outline;
+    if (action.contains('INSERT')) return Icons.add_circle_outline;
+    if (action.contains('UPDATE')) return Icons.edit_note;
+    if (action.contains('DELETE')) return Icons.delete_forever;
+    return Icons.history;
+  }
+
+  MaterialColor _getColorForAction(String? action) {
+    if (action == null) return Colors.blue;
+    if (action.contains('INSERT')) return Colors.green;
+    if (action.contains('UPDATE')) return Colors.blue;
+    if (action.contains('DELETE')) return Colors.red;
+    return Colors.grey;
+  }
+
   Widget _buildSectionHeader(String title, IconData icon) {
     return Row(
       children: [
         Icon(icon, color: Colors.grey.shade700, size: 20),
         const SizedBox(width: 8),
-        Text(
-          title,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
+        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       ],
     );
   }
@@ -111,24 +144,15 @@ class MonitoringScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(
-                          title,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
+                        child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       ),
-                      Text(time, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                      Text(time, style: TextStyle(color: Colors.grey.shade500, fontSize: 10)),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'Oleh: $user',
-                    style: TextStyle(fontSize: 12, color: color.shade700, fontWeight: FontWeight.w500),
-                  ),
+                  Text('Tabel: $user', style: TextStyle(fontSize: 12, color: color.shade700, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 4),
-                  Text(
-                    detail,
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                  ),
+                  Text(detail, style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
                 ],
               ),
             ),

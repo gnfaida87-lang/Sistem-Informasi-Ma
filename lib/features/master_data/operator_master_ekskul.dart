@@ -16,79 +16,95 @@ class _OperatorMasterEkskulState extends ConsumerState<OperatorMasterEkskul> wit
   final TextEditingController _pembinaCtrl = TextEditingController();
 
   void _showAddDialog({Extracurricular? ekskul}) {
+    String? selectedCoachId = ekskul?.coach;
     if (ekskul != null) {
       _namaCtrl.text = ekskul.name;
-      _pembinaCtrl.text = ekskul.coach ?? '';
     } else {
       _namaCtrl.clear();
-      _pembinaCtrl.clear();
+      selectedCoachId = null;
     }
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(ekskul == null ? 'Tambah Ekstrakurikuler Baru' : 'Edit Ekstrakurikuler', 
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _namaCtrl,
-              decoration: InputDecoration(
-                labelText: 'Nama Ekskul',
-                hintText: 'Contoh: Pramuka, PMR, Futsal',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(ekskul == null ? 'Tambah Ekstrakurikuler Baru' : 'Edit Ekstrakurikuler', 
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _namaCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Nama Ekskul',
+                  hintText: 'Contoh: Pramuka, PMR, Futsal',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
               ),
+              const SizedBox(height: 16),
+              Consumer(
+                builder: (context, ref, child) {
+                  final teachersAsync = ref.watch(allTeachersProvider);
+                  return teachersAsync.when(
+                    data: (teachers) => DropdownButtonFormField<String>(
+                      value: selectedCoachId,
+                      decoration: InputDecoration(
+                        labelText: 'Pilih Pembina',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        prefixIcon: const Icon(Icons.person_pin_outlined),
+                      ),
+                      items: teachers.map((t) => DropdownMenuItem(
+                        value: t.name, // Kita gunakan nama dulu untuk kemudahan display
+                        child: Text(t.name),
+                      )).toList(),
+                      onChanged: (value) => setDialogState(() => selectedCoachId = value),
+                    ),
+                    loading: () => const LinearProgressIndicator(),
+                    error: (_, __) => const Text('Gagal mengambil data guru'),
+                  );
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _pembinaCtrl,
-              decoration: InputDecoration(
-                labelText: 'Nama Pembina',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                prefixIcon: const Icon(Icons.person_pin_outlined),
+            ElevatedButton(
+              onPressed: () {
+                final nama = _namaCtrl.text;
+                final pembina = selectedCoachId;
+
+                Navigator.pop(context);
+                safeCall(
+                  context: context,
+                  successMessage: 'Data Berhasil Disimpan',
+                  action: () async {
+                    final service = ref.read(masterServiceProvider);
+                    final newEkskul = Extracurricular(
+                      id: ekskul?.id ?? '',
+                      name: nama,
+                      coach: pembina,
+                    );
+
+                    if (ekskul == null) {
+                      await service.addEkskul(newEkskul);
+                    } else {
+                      await service.updateEkskul(newEkskul);
+                    }
+                    ref.invalidate(allEkskulProvider);
+                  },
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.brown.shade600,
+                foregroundColor: Colors.white,
               ),
+              child: const Text('Simpan'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final nama = _namaCtrl.text;
-              final pembina = _pembinaCtrl.text;
-
-              Navigator.pop(context);
-              safeCall(
-                context: context,
-                successMessage: 'Data Berhasil Disimpan',
-                action: () async {
-                  final service = ref.read(masterServiceProvider);
-                  final newEkskul = Extracurricular(
-                    id: ekskul?.id ?? '',
-                    name: nama,
-                    coach: pembina,
-                  );
-
-                  if (ekskul == null) {
-                    await service.addEkskul(newEkskul);
-                  } else {
-                    await service.updateEkskul(newEkskul);
-                  }
-                  ref.invalidate(allEkskulProvider);
-                },
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.brown.shade600,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Simpan'),
-          ),
-        ],
       ),
     );
   }
@@ -120,6 +136,110 @@ class _OperatorMasterEkskulState extends ConsumerState<OperatorMasterEkskul> wit
             child: const Text('Hapus'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _manageMembers(Extracurricular ekskul) {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Anggota: ${ekskul.name}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
+          content: SizedBox(
+            width: 500,
+            height: 600,
+            child: Column(
+              children: [
+                // Pencarian Siswa Baru
+                Consumer(
+                  builder: (context, ref, child) {
+                    final studentsAsync = ref.watch(allStudentsProvider);
+                    return studentsAsync.when(
+                      data: (students) => Autocomplete<Student>(
+                        displayStringForOption: (s) => "${s.nis} - ${s.name}",
+                        optionsBuilder: (textEditingValue) {
+                          if (textEditingValue.text.isEmpty) return const Iterable<Student>.empty();
+                          return students.where((s) => 
+                            s.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) || 
+                            s.nis.contains(textEditingValue.text)
+                          );
+                        },
+                        onSelected: (student) async {
+                          await safeCall(
+                            context: context,
+                            successMessage: 'Siswa berhasil ditambahkan',
+                            action: () async {
+                              await ref.read(masterServiceProvider).addEkskulParticipant(ekskul.id, student.id);
+                              setDialogState(() {}); // Refresh list
+                            },
+                          );
+                        },
+                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) => TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            hintText: 'Cari Nama Siswa atau NISN...',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: const Icon(Icons.add_circle, color: Colors.blue),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                      loading: () => const LinearProgressIndicator(),
+                      error: (_, __) => const Text('Gagal memuat data siswa'),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+                const Divider(),
+                const Text('Daftar Anggota Saat Ini', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: FutureBuilder<List<EkskulParticipant>>(
+                    future: ref.read(masterServiceProvider).fetchEkskulParticipants(ekskul.id),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final members = snapshot.data ?? [];
+                      if (members.isEmpty) {
+                        return const Center(child: Text('Belum ada anggota', style: TextStyle(color: Colors.grey)));
+                      }
+                      return ListView.separated(
+                        itemCount: members.length,
+                        separatorBuilder: (context, index) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final m = members[index];
+                          return ListTile(
+                            title: Text(m.student?.name ?? 'Siswa Tidak Dikenal', style: const TextStyle(fontSize: 14)),
+                            subtitle: Text('NISN: ${m.student?.nis ?? "-"}', style: const TextStyle(fontSize: 12)),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+                              onPressed: () async {
+                                await safeCall(
+                                  context: context,
+                                  successMessage: 'Siswa dihapus dari ekskul',
+                                  action: () async {
+                                    await ref.read(masterServiceProvider).removeEkskulParticipant(m.id);
+                                    setDialogState(() {}); // Refresh list
+                                  },
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Tutup')),
+          ],
+        ),
       ),
     );
   }
@@ -208,6 +328,13 @@ class _OperatorMasterEkskulState extends ConsumerState<OperatorMasterEkskul> wit
         DataCell(
           Row(
             children: [
+              TextButton.icon(
+                onPressed: () => _manageMembers(ekskul),
+                icon: const Icon(Icons.people_outline, size: 18),
+                label: const Text('Anggota', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(foregroundColor: Colors.indigo),
+              ),
+              const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.edit, color: Colors.blue, size: 18), 
                 tooltip: 'Edit Ekskul',

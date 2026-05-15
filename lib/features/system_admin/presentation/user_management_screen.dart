@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import '../../../core/network/d1_service.dart';
 import '../../../core/utils/context_extensions.dart';
@@ -27,6 +29,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     _fetchUsers();
   }
 
+  // ── HELPER: SHA-256 HASHING ──
+  String _hashPassword(String password) {
+    final bytes = utf8.encode(password);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
   Future<void> _fetchUsers() async {
     setState(() {
       _isLoading = true;
@@ -36,10 +45,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     try {
       final data = await _d1Service.query(
         """
-        SELECT u.*, r.code as role_code, r.nama as role_name 
+        SELECT u.*, r.code as role_code, r.nama as role_name, t.is_wali_kelas
         FROM users u
         LEFT JOIN user_roles ur ON u.id = ur.user_id AND ur.is_primary = 1
         LEFT JOIN roles r ON ur.role_id = r.id
+        LEFT JOIN teachers t ON u.id = t.user_id
         ORDER BY u.created_at DESC
         """
       );
@@ -48,6 +58,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         ...json,
         'role_code': json['role_code'],
         'role_name': json['role_name'],
+        'is_wali_kelas': json['is_wali_kelas'],
       })).toList();
       
       _applyFilter();
@@ -72,7 +83,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         final matchesRole = _selectedRoleFilter == 'Semua Role' || u.roleCode == _selectedRoleFilter;
         final matchesSearch = _searchQuery.isEmpty || 
                               u.username.toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                              u.email.toLowerCase().contains(_searchQuery.toLowerCase());
+                              u.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                              u.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                              (u.nisNip?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
         return matchesRole && matchesSearch;
       }).toList();
     });
@@ -173,13 +186,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       'OP': 'Operator',
       'AK': 'Admin Keuangan',
       'GM': 'Guru Mapel',
-      'GB': 'Guru BK',
+      'GB': 'Guru Bimbel',
       'OT': 'Orang Tua',
     };
     return roleNames[code] ?? code;
   }
 
   Widget _buildUserList() {
+    if (_filteredUsers.isEmpty) {
+      return const Center(child: Text('Tidak ada user ditemukan.'));
+    }
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: _filteredUsers.length,
@@ -191,12 +207,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             backgroundColor: user.isActive ? Colors.green.shade50 : Colors.red.shade50,
             child: Icon(user.isActive ? Icons.person : Icons.person_off, color: user.isActive ? Colors.green : Colors.red),
           ),
-          title: Text(user.username, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text("${user.email} • ${user.roleName ?? 'Tanpa Role'}"),
+          title: Text(user.fullName.isNotEmpty ? user.fullName : user.username, style: const TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Text("${user.email}${user.nisNip != null ? ' • ${user.nisNip}' : ''} • ${user.roleName ?? 'Tanpa Role'}"),
           trailing: PopupMenuButton<String>(
             onSelected: (action) => _handleUserAction(context, action, user),
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'reset_pass', child: Text('Reset Password')),
+              const PopupMenuItem(value: 'edit_role', child: Text('Ubah Role')),
               PopupMenuItem(value: 'toggle_status', child: Text(user.isActive ? 'Nonaktifkan' : 'Aktifkan')),
             ],
           ),
@@ -206,16 +223,248 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 
   void _showAddUserModal(BuildContext context) {
-    // Implementasi D1 insert untuk user baru
-    context.showErrorSnackBar('Gunakan fitur registrasi atau hubungi Admin sistem.');
+    final usernameController = TextEditingController();
+    final fullNameController = TextEditingController();
+    final nisNipController = TextEditingController();
+    final emailController = TextEditingController();
+    final passController = TextEditingController();
+    String selectedRole = 'GM'; // Default Guru Mapel
+    bool isWaliKelas = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          title: const Text('Tambah User Baru'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildModalTextField(fullNameController, 'Nama Lengkap'),
+                _buildModalTextField(nisNipController, 'NIS / NIP'),
+                _buildModalTextField(usernameController, 'Username'),
+                _buildModalTextField(emailController, 'Email'),
+                _buildModalTextField(passController, 'Password', isObscure: true),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedRole,
+                  decoration: const InputDecoration(
+                    labelText: 'Role Akses',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _roles.where((r) => r != 'Semua Role').map((r) => DropdownMenuItem(value: r, child: Text(_getFullRoleName(r)))).toList(),
+                  onChanged: (v) {
+                    setModalState(() {
+                      selectedRole = v!;
+                      // Jika bukan Guru, matikan checkbox wali kelas
+                      if (selectedRole != 'GM' && selectedRole != 'GB') {
+                        isWaliKelas = false;
+                      }
+                    });
+                  },
+                ),
+                if (selectedRole == 'GM' || selectedRole == 'GB') ...[
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    title: const Text('Tugaskan sebagai Wali Kelas?', style: TextStyle(fontSize: 14)),
+                    value: isWaliKelas,
+                    onChanged: (v) => setModalState(() => isWaliKelas = v!),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+            ElevatedButton(
+              onPressed: () async {
+                if (usernameController.text.isEmpty || passController.text.isEmpty || fullNameController.text.isEmpty) {
+                  context.showErrorSnackBar('Nama Lengkap, Username, dan Password wajib diisi');
+                  return;
+                }
+                
+                final id = "u_${DateTime.now().millisecondsSinceEpoch}";
+                final hash = _hashPassword(passController.text);
+                
+                try {
+                  // 1. Simpan ke tabel users
+                  await _d1Service.query(
+                    "INSERT INTO users (id, username, full_name, nis_nip, email, password_hash, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)",
+                    params: [
+                      id, 
+                      usernameController.text, 
+                      fullNameController.text, 
+                      nisNipController.text.isEmpty ? null : nisNipController.text,
+                      emailController.text, 
+                      hash
+                    ],
+                  );
+                  
+                  // 2. Hubungkan ke Role
+                  final roleRes = await _d1Service.query("SELECT id FROM roles WHERE code = ? LIMIT 1", params: [selectedRole]);
+                  if ((roleRes as List).isNotEmpty) {
+                    final roleId = roleRes.first['id'];
+                    await _d1Service.query(
+                      "INSERT INTO user_roles (user_id, role_id, is_primary) VALUES (?, ?, 1)",
+                      params: [id, roleId],
+                    );
+                  }
+
+                  // 3. Jika Guru, simpan ke tabel teachers
+                  if (selectedRole == 'GM' || selectedRole == 'GB') {
+                    await _d1Service.query(
+                      "INSERT INTO teachers (user_id, is_wali_kelas) VALUES (?, ?)",
+                      params: [id, isWaliKelas ? 1 : 0],
+                    );
+                  }
+                  
+                  if (mounted) {
+                    Navigator.pop(context);
+                    _fetchUsers();
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User berhasil ditambahkan!')));
+                  }
+                } catch (e) {
+                  context.showErrorSnackBar('Gagal: $e');
+                }
+              },
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModalTextField(TextEditingController controller, String label, {bool isObscure = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        obscureText: isObscure,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        ),
+      ),
+    );
   }
 
   void _handleUserAction(BuildContext context, String action, AppUser user) {
     if (action == 'reset_pass') {
-      _resetPassword(user);
+      _showResetPasswordDialog(user);
+    } else if (action == 'edit_role') {
+      _showEditRoleDialog(user);
     } else if (action == 'toggle_status') {
       _toggleUserStatus(user);
     }
+  }
+
+  void _showEditRoleDialog(AppUser user) {
+    String currentRole = user.roleCode ?? 'GM';
+    bool isWaliKelas = user.isWaliKelas;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          title: Text('Ubah Role: ${user.username}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: currentRole,
+                decoration: const InputDecoration(labelText: 'Role Akses', border: OutlineInputBorder()),
+                items: _roles.where((r) => r != 'Semua Role').map((r) => DropdownMenuItem(value: r, child: Text(_getFullRoleName(r)))).toList(),
+                onChanged: (v) => setModalState(() {
+                  currentRole = v!;
+                  if (currentRole != 'GM' && currentRole != 'GB') isWaliKelas = false;
+                }),
+              ),
+              if (currentRole == 'GM' || currentRole == 'GB') ...[
+                const SizedBox(height: 16),
+                CheckboxListTile(
+                  title: const Text('Wali Kelas?', style: TextStyle(fontSize: 14)),
+                  value: isWaliKelas,
+                  onChanged: (v) => setModalState(() => isWaliKelas = v!),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  // 1. Update primary role
+                  final roleRes = await _d1Service.query("SELECT id FROM roles WHERE code = ? LIMIT 1", params: [currentRole]);
+                  if ((roleRes as List).isNotEmpty) {
+                    final roleId = roleRes.first['id'];
+                    await _d1Service.query(
+                      "UPDATE user_roles SET role_id = ? WHERE user_id = ? AND is_primary = 1",
+                      params: [roleId, user.id],
+                    );
+                  }
+
+                  // 2. Update/Insert teacher status
+                  if (currentRole == 'GM' || currentRole == 'GB') {
+                    await _d1Service.query(
+                      "INSERT INTO teachers (user_id, is_wali_kelas) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET is_wali_kelas = excluded.is_wali_kelas",
+                      params: [user.id, isWaliKelas ? 1 : 0],
+                    );
+                  } else {
+                    // Hapus jika bukan guru lagi? Atau biarkan saja.
+                  }
+
+                  if (mounted) {
+                    Navigator.pop(context);
+                    _fetchUsers();
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Role berhasil diperbarui!')));
+                  }
+                } catch (e) {
+                  context.showErrorSnackBar('Gagal update role: $e');
+                }
+              },
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showResetPasswordDialog(AppUser user) {
+    final passController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Reset Password: ${user.username}'),
+        content: TextField(controller: passController, decoration: const InputDecoration(labelText: 'Password Baru'), obscureText: true),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (passController.text.isEmpty) return;
+              final hash = _hashPassword(passController.text);
+              try {
+                await _d1Service.query("UPDATE users SET password_hash = ? WHERE id = ?", params: [hash, user.id]);
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password berhasil diupdate!')));
+                }
+              } catch (e) {
+                context.showErrorSnackBar('Gagal: $e');
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _toggleUserStatus(AppUser user) async {
@@ -227,18 +476,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       _fetchUsers();
     } catch (e) {
       context.showErrorSnackBar('Gagal update status: $e');
-    }
-  }
-
-  Future<void> _resetPassword(AppUser user) async {
-    try {
-      await _d1Service.query(
-        "UPDATE users SET password_hash = ? WHERE id = ?",
-        params: ['12345678', user.id],
-      );
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password direset ke default: 12345678')));
-    } catch (e) {
-      context.showErrorSnackBar('Gagal reset password: $e');
     }
   }
 }

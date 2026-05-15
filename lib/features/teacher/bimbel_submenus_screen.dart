@@ -330,15 +330,3 @@ class _BimbelNilaiScreenState extends State<BimbelNilaiScreen> with SafeAsync {
   }
 }
 
-// 3. Screen Materi tetapkan sederhana untuk sekarang (Placeholder)
-class BimbelMateriScreen extends StatelessWidget {
-  final String title;
-  const BimbelMateriScreen({super.key, required this.title});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: const Center(child: Text('Fitur integrasi file segera hadir.')),
-    );
-  }
-}

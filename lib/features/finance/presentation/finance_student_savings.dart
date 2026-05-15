@@ -5,6 +5,9 @@ import '../services/finance_service.dart';
 import '../models/finance_models.dart';
 import '../../master_data/services/master_service.dart';
 import '../../master_data/models/master_models.dart';
+import '../../../core/utils/receipt_helper.dart';
+import '../../../core/providers/system_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class FinanceStudentSavings extends StatefulWidget {
   const FinanceStudentSavings({super.key});
@@ -102,6 +105,17 @@ class _FinanceStudentSavingsState extends State<FinanceStudentSavings> with Safe
     );
 
     if (confirmed == true) {
+      final amount = double.tryParse(amountController.text) ?? 0;
+      if (amount <= 0) return;
+
+      // Validasi Saldo untuk Penarikan
+      if (type == 'tarik' && amount > _saldo) {
+        if (mounted) {
+          context.showErrorSnackBar('Gagal! Saldo tidak mencukupi (Saldo saat ini: Rp ${_saldo.toStringAsFixed(0)})');
+        }
+        return;
+      }
+
       await safeCall(
         context: context,
         successMessage: 'Transaksi tabungan berhasil dicatat!',
@@ -109,7 +123,7 @@ class _FinanceStudentSavingsState extends State<FinanceStudentSavings> with Safe
           final savings = Savings(
             id: '',
             studentId: _foundSiswa!.id,
-            amount: double.tryParse(amountController.text) ?? 0,
+            amount: amount,
             savedAt: DateTime.now(),
             type: type,
           );
@@ -220,6 +234,20 @@ class _FinanceStudentSavingsState extends State<FinanceStudentSavings> with Safe
                     ),
                   ),
                   ElevatedButton.icon(
+                    onPressed: () {
+                      ReceiptHelper.printSavingsHistory(
+                        studentName: _foundSiswa!.name,
+                        nis: _foundSiswa!.nis,
+                        transactions: _savings,
+                        currentBalance: _saldo,
+                      );
+                    },
+                    icon: const Icon(Icons.print_outlined),
+                    label: const Text('Cetak Buku Tabungan'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
                     onPressed: _addSavings,
                     icon: const Icon(Icons.add),
                     label: const Text('Tambah Transaksi'),
@@ -265,6 +293,7 @@ class _FinanceStudentSavingsState extends State<FinanceStudentSavings> with Safe
                           DataColumn(label: Text('Tanggal')),
                           DataColumn(label: Text('Jenis')),
                           DataColumn(label: Text('Nominal')),
+                          DataColumn(label: Text('Aksi')),
                         ],
                         rows: _savings.map((s) => DataRow(
                           cells: [
@@ -281,6 +310,23 @@ class _FinanceStudentSavingsState extends State<FinanceStudentSavings> with Safe
                               ),
                             ),
                             DataCell(Text('Rp ${s.amount.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold))),
+                            DataCell(
+                              IconButton(
+                                icon: const Icon(Icons.print_outlined, size: 20, color: Colors.blue),
+                                tooltip: 'Cetak Kwitansi',
+                                onPressed: () {
+                                  final settings = context.mounted ? null : null; // Placeholder for schoolName if needed
+                                  ReceiptHelper.printReceipt(
+                                    title: s.type == 'setor' ? 'SETORAN TABUNGAN' : 'PENARIKAN TABUNGAN',
+                                    studentName: _foundSiswa!.name,
+                                    nis: _foundSiswa!.nis,
+                                    amount: 'Rp ${s.amount.toStringAsFixed(0)}',
+                                    description: 'Transaksi tabungan ${s.type == 'setor' ? 'masuk' : 'keluar'}',
+                                    transactionId: s.id.isEmpty ? 'SAV-${DateTime.now().millisecondsSinceEpoch}' : s.id,
+                                  );
+                                },
+                              ),
+                            ),
                           ],
                         )).toList(),
                       ),

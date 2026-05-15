@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/academic_provider.dart';
 import '../../../core/mixins/safe_async_mixin.dart';
 import '../../../core/utils/context_extensions.dart';
+import '../../../core/utils/teaching_schedule_pdf_helper.dart';
 import 'models/scheduling_models.dart';
 import 'models/academic_models.dart';
 import 'models/school_models.dart';
@@ -23,6 +24,7 @@ class _WakakurJadwalMengajarState extends ConsumerState<WakakurJadwalMengajar> w
   String _selectedLevel = 'X';
   final List<String> _levels = ['X', 'XI', 'XII'];
   
+  String? _selectedClassId; // null means "Semua Kelas"
   List<Kelas> _classes = [];
   List<TimeSlot> _timeSlots = [];
   List<Guru> _teachers = [];
@@ -62,6 +64,11 @@ class _WakakurJadwalMengajarState extends ConsumerState<WakakurJadwalMengajar> w
     }
 
     _classes = await scheduleService.getClassesByLevel(_selectedLevel);
+    
+    // Reset selected class if not in current level
+    if (_selectedClassId != null && !_classes.any((c) => c.id == _selectedClassId)) {
+      _selectedClassId = null;
+    }
     _timeSlots = await scheduleService.getTimeSlots(_selectedDay);
     
     if (_selectedSemesterId != null && _classes.isNotEmpty) {
@@ -125,6 +132,36 @@ class _WakakurJadwalMengajarState extends ConsumerState<WakakurJadwalMengajar> w
      );
   }
 
+  Future<void> _resetSchedule() async {
+    if (_selectedSemesterId == null || _classes.isEmpty) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Jadwal?'),
+        content: Text('Apakah Anda yakin ingin menghapus SELURUH jadwal untuk Level $_selectedLevel pada hari $_selectedDay?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Ya, Hapus Semua', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await safeCall(
+        context: context,
+        action: () async {
+          final service = ref.read(scheduleServiceProvider);
+          for (var kelas in _classes) {
+             await service.deleteSchedulesByClassAndDay(_selectedSemesterId!, kelas.id, _selectedDay);
+          }
+          await _loadContextualData();
+        },
+        successMessage: 'Jadwal hari $_selectedDay berhasil direset!',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final semesters = ref.watch(semestersProvider).value ?? [];
@@ -160,14 +197,57 @@ class _WakakurJadwalMengajarState extends ConsumerState<WakakurJadwalMengajar> w
                 'Jadwal (Pengendali Tunggal)',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF2B3674)),
               ),
-              const Spacer(),
-              _buildFilterDropdown('Semester', _selectedSemesterId, semesters.map((s) => 
-                DropdownMenuItem(value: s.id, child: Text('${s.nama} ${s.yearName}', style: const TextStyle(fontSize: 12)))).toList(), 
-                (val) {
-                  setState(() => _selectedSemesterId = val);
-                  _loadContextualData();
-                }
-              ),
+               const Spacer(),
+               if (_currentSchedule.isNotEmpty) ...[
+                ElevatedButton.icon(
+                  onPressed: () {
+                    final semesters = ref.read(semestersProvider).value ?? [];
+                    final activeSem = semesters.firstWhere((s) => s.id == _selectedSemesterId, orElse: () => semesters.first);
+                    
+                    TeachingSchedulePdfHelper.generateAndPrint(
+                      semesterName: '${activeSem.nama} ${activeSem.yearName}',
+                      level: _selectedLevel,
+                      day: _selectedDay,
+                      classes: _classes.where((c) => _selectedClassId == null || c.id == _selectedClassId).toList(),
+                      timeSlots: _timeSlots,
+                      scheduleData: _currentSchedule,
+                    );
+                  },
+                  icon: const Icon(Icons.picture_as_pdf, size: 16),
+                  label: const Text('Cetak PDF', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: _resetSchedule,
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Colors.red),
+                  label: const Text('Reset Hari Ini', style: TextStyle(color: Colors.red, fontSize: 12)),
+                ),
+               ],
+               const SizedBox(width: 8),
+               Container(
+                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                 decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(20)),
+                 child: Row(
+                   children: [
+                     Icon(Icons.cloud_done, size: 14, color: Colors.green.shade700),
+                     const SizedBox(width: 4),
+                     Text('Tersimpan', style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.bold)),
+                   ],
+                 ),
+               ),
+               const SizedBox(width: 16),
+               _buildFilterDropdown('Semester', _selectedSemesterId, semesters.map((s) => 
+                 DropdownMenuItem(value: s.id, child: Text('${s.nama} ${s.yearName}', style: const TextStyle(fontSize: 12)))).toList(), 
+                 (val) {
+                   setState(() => _selectedSemesterId = val);
+                   _loadContextualData();
+                 }
+               ),
               const SizedBox(width: 12),
               _buildFilterDropdown('Level', _selectedLevel, _levels.map((l) => 
                 DropdownMenuItem(value: l, child: Text('Kelas $l', style: const TextStyle(fontSize: 12)))).toList(), 
@@ -176,14 +256,22 @@ class _WakakurJadwalMengajarState extends ConsumerState<WakakurJadwalMengajar> w
                   _loadContextualData();
                 }
               ),
-              const SizedBox(width: 12),
-              _buildFilterDropdown('Hari', _selectedDay, _days.map((d) => 
-                DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 12)))).toList(), 
-                (val) {
-                  setState(() => _selectedDay = val!);
-                  _loadContextualData();
-                }
-              ),
+               const SizedBox(width: 12),
+               _buildFilterDropdown('Kelas', _selectedClassId, [
+                 const DropdownMenuItem(value: null, child: Text('Semua Kelas', style: TextStyle(fontSize: 12))),
+                 ..._classes.map((c) => DropdownMenuItem(value: c.id, child: Text(c.nama, style: const TextStyle(fontSize: 12)))),
+               ], 
+               (val) {
+                 setState(() => _selectedClassId = val);
+               }),
+               const SizedBox(width: 12),
+               _buildFilterDropdown('Hari', _selectedDay, _days.map((d) => 
+                 DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 12)))).toList(), 
+                 (val) {
+                   setState(() => _selectedDay = val!);
+                   _loadContextualData();
+                 }
+               ),
             ],
           ),
           const SizedBox(height: 12),
@@ -238,9 +326,12 @@ class _WakakurJadwalMengajarState extends ConsumerState<WakakurJadwalMengajar> w
             headingRowColor: MaterialStateProperty.all(Colors.teal.shade50),
             columns: [
               const DataColumn(label: Text('Waktu', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              ..._classes.map((c) => DataColumn(label: Container(width: 140, child: Center(child: Text(c.nama, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)))))),
+              ..._classes
+                  .where((c) => _selectedClassId == null || c.id == _selectedClassId)
+                  .map((c) => DataColumn(label: Container(width: 140, child: Center(child: Text(c.nama, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)))))),
             ],
             rows: _timeSlots.map((slot) {
+              final filteredClasses = _classes.where((c) => _selectedClassId == null || c.id == _selectedClassId).toList();
               return DataRow(
                 cells: [
                   DataCell(Column(
@@ -252,7 +343,7 @@ class _WakakurJadwalMengajarState extends ConsumerState<WakakurJadwalMengajar> w
                       Text(slot.timeRange, style: const TextStyle(fontSize: 9, color: Colors.grey)),
                     ],
                   )),
-                  ..._classes.map((kelas) {
+                  ...filteredClasses.map((kelas) {
                     if (slot.isBreak) {
                       return DataCell(Container(
                         width: double.infinity,

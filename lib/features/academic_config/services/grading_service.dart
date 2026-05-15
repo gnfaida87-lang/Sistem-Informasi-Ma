@@ -1,5 +1,6 @@
-// lib/features/academic_config/services/grading_service.dart
+﻿// lib/features/academic_config/services/grading_service.dart
 import '../../../core/network/d1_service.dart';
+import 'package:flutter/foundation.dart';
 
 /// Step 9: Service untuk manajemen Jadwal Ujian & Nilai Siswa via Cloudflare D1
 class GradingService {
@@ -16,24 +17,24 @@ class GradingService {
   }) async {
     try {
       String sql = """
-        SELECT sg.id, sg.score, sg.type,
-               s.name as subject_name, s.code as subject_code, s.min_score as kkm
-        FROM student_grades sg
-        JOIN subjects s ON sg.subject_id = s.id
-        WHERE sg.student_id = ?
+        SELECT sg.id, sg.nilai as score, sg.jenis_ujian as type,
+               s.nama as subject_name, s.kode as subject_code, s.kkm
+        FROM nilai_siswa sg
+        JOIN subjects s ON sg.mapel_id = s.id
+        WHERE sg.siswa_id = ?
       """;
       final params = <dynamic>[studentId];
 
       if (semesterId != null) {
-        sql += " AND sg.semester_id = ?";
+        sql += " AND sg.tahun_ajaran_id = ?";
         params.add(semesterId);
       }
-      sql += " ORDER BY s.name ASC";
+      sql += " ORDER BY s.nama ASC";
 
       final results = await _d1Service.query(sql, params: params);
       return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      print("Error fetchStudentGrades: $e");
+      debugPrint("Error fetchStudentGrades: $e");
       return [];
     }
   }
@@ -45,19 +46,19 @@ class GradingService {
   }) async {
     try {
       const sql = """
-        SELECT sg.student_id, sg.score, sg.type,
-               s.name as student_name, s.nis,
-               sub.name as subject_name, sub.min_score as kkm
-        FROM student_grades sg
-        JOIN students s ON sg.student_id = s.id
-        JOIN subjects sub ON sg.subject_id = sub.id
-        WHERE s.class_id = ? AND sg.semester_id = ?
-        ORDER BY s.name, sub.name
+        SELECT sg.siswa_id as student_id, sg.nilai as score, sg.jenis_ujian as type,
+               s.nama as student_name, s.nis,
+               sub.nama as subject_name, sub.kkm
+        FROM nilai_siswa sg
+        JOIN students s ON sg.siswa_id = s.id
+        JOIN subjects sub ON sg.mapel_id = sub.id
+        WHERE s.kelas_id = ? AND sg.tahun_ajaran_id = ?
+        ORDER BY s.nama, sub.nama
       """;
       final results = await _d1Service.query(sql, params: [classId, semesterId]);
       return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      print("Error fetchClassGradesRecap: $e");
+      debugPrint("Error fetchClassGradesRecap: $e");
       return [];
     }
   }
@@ -72,15 +73,15 @@ class GradingService {
   }) async {
     try {
       const sql = """
-        INSERT INTO student_grades (id, student_id, subject_id, semester_id, score, type)
+        INSERT INTO nilai_siswa (id, siswa_id, mapel_id, tahun_ajaran_id, nilai, jenis_ujian)
         VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(student_id, subject_id, semester_id, type) DO UPDATE SET
-          score = excluded.score
+        ON CONFLICT(siswa_id, mapel_id, tahun_ajaran_id, jenis_ujian) DO UPDATE SET
+          nilai = excluded.nilai
       """;
       final id = '${studentId}_${subjectId}_${semesterId}_$type';
       await _d1Service.query(sql, params: [id, studentId, subjectId, semesterId, score, type]);
     } catch (e) {
-      print("Error upsertGrade: $e");
+      debugPrint("Error upsertGrade: $e");
       rethrow;
     }
   }
@@ -99,7 +100,7 @@ class GradingService {
         );
         successCount++;
       } catch (e) {
-        print("Skip grade entry due to error: $e");
+        debugPrint("Skip grade entry due to error: $e");
       }
     }
     return successCount;
@@ -113,19 +114,19 @@ class GradingService {
   Future<List<Map<String, dynamic>>> fetchExamSchedules(String semesterId) async {
     try {
       const sql = """
-        SELECT es.id, es.exam_date, es.start_time, es.end_time, es.room, es.type,
-               sub.name as subject_name, sub.code as subject_code,
-               c.name as class_name
-        FROM exam_schedules es
-        JOIN subjects sub ON es.subject_id = sub.id
-        LEFT JOIN classes c ON es.class_id = c.id
-        WHERE es.semester_id = ?
-        ORDER BY es.exam_date ASC, es.start_time ASC
+        SELECT es.id, es.tanggal_ujian as exam_date, es.jam_mulai as start_time, es.jam_selesai as end_time, es.ruangan as room, es.jenis_ujian as type,
+               sub.nama as subject_name, sub.kode as subject_code,
+               c.nama as class_name
+        FROM jadwal_ujian es
+        JOIN subjects sub ON es.mapel_id = sub.id
+        LEFT JOIN classes c ON es.kelas_id = c.id
+        WHERE es.tahun_ajaran_id = ?
+        ORDER BY es.tanggal_ujian ASC, es.jam_mulai ASC
       """;
       final results = await _d1Service.query(sql, params: [semesterId]);
       return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      print("Error fetchExamSchedules: $e");
+      debugPrint("Error fetchExamSchedules: $e");
       return [];
     }
   }
@@ -144,14 +145,14 @@ class GradingService {
     try {
       final id = 'exam_${DateTime.now().millisecondsSinceEpoch}';
       const sql = """
-        INSERT INTO exam_schedules (id, subject_id, class_id, semester_id, exam_date, start_time, end_time, room, type)
+        INSERT INTO jadwal_ujian (id, mapel_id, kelas_id, tahun_ajaran_id, tanggal_ujian, jam_mulai, jam_selesai, ruangan, jenis_ujian)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       """;
       await _d1Service.query(sql, params: [
         id, subjectId, classId, semesterId, examDate, startTime, endTime, room, type
       ]);
     } catch (e) {
-      print("Error addExamSchedule: $e");
+      debugPrint("Error addExamSchedule: $e");
       rethrow;
     }
   }
@@ -159,9 +160,9 @@ class GradingService {
   /// Hapus jadwal ujian
   Future<void> deleteExamSchedule(String id) async {
     try {
-      await _d1Service.query("DELETE FROM exam_schedules WHERE id = ?", params: [id]);
+      await _d1Service.query("DELETE FROM jadwal_ujian WHERE id = ?", params: [id]);
     } catch (e) {
-      print("Error deleteExamSchedule: $e");
+      debugPrint("Error deleteExamSchedule: $e");
       rethrow;
     }
   }
@@ -181,11 +182,11 @@ class GradingService {
       try {
         final id = 'att_${att['student_id']}_$date';
         const sql = """
-          INSERT INTO attendance (id, student_id, class_id, teacher_id, date, status, notes)
+          INSERT INTO absensi (id, siswa_id, kelas_id, guru_id, tanggal, status, keterangan)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(student_id, date) DO UPDATE SET
+          ON CONFLICT(siswa_id, tanggal) DO UPDATE SET
             status = excluded.status,
-            notes = excluded.notes
+            keterangan = excluded.keterangan
         """;
         await _d1Service.query(sql, params: [
           id,
@@ -197,7 +198,7 @@ class GradingService {
           att['notes'],
         ]);
       } catch (e) {
-        print("Skip attendance entry: $e");
+        debugPrint("Skip attendance entry: $e");
       }
     }
   }
@@ -210,15 +211,15 @@ class GradingService {
     try {
       const sql = """
         SELECT status, COUNT(*) as total
-        FROM attendance
-        WHERE student_id = ? AND semester_id = ?
+        FROM absensi
+        WHERE siswa_id = ? AND tahun_ajaran_id = ?
         GROUP BY status
       """;
       final results = await _d1Service.query(sql, params: [studentId, semesterId]);
       
       final summary = <String, int>{'hadir': 0, 'izin': 0, 'sakit': 0, 'alpha': 0};
       for (final row in results) {
-        final status = row['status'] as String? ?? 'alpha';
+        final status = (row['status'] as String? ?? 'alpha').toLowerCase();
         summary[status] = (row['total'] as num?)?.toInt() ?? 0;
       }
       final total = summary.values.fold(0, (a, b) => a + b);
@@ -226,7 +227,7 @@ class GradingService {
 
       return {...summary, 'total': total, 'attendance_pct': pct};
     } catch (e) {
-      print("Error fetchAttendanceSummary: $e");
+      debugPrint("Error fetchAttendanceSummary: $e");
       return {'hadir': 0, 'izin': 0, 'sakit': 0, 'alpha': 0, 'total': 0, 'attendance_pct': '0'};
     }
   }

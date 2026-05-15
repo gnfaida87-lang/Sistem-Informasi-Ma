@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/mixins/safe_async_mixin.dart';
 import '../../core/providers/master_provider.dart';
 import 'models/master_models.dart';
+import '../../core/utils/excel_helper.dart';
+import 'utils/teacher_card_helper.dart';
 
 class OperatorMasterGuru extends ConsumerStatefulWidget {
   const OperatorMasterGuru({super.key});
@@ -136,6 +138,121 @@ class _OperatorMasterGuruState extends ConsumerState<OperatorMasterGuru> with Sa
     );
   }
 
+  Future<void> _downloadTemplate() async {
+    await ExcelHelper.exportToExcel(
+      fileName: 'Template_Guru.xlsx', 
+      sheetName: 'Guru', 
+      headers: ['Nama Lengkap', 'NIP', 'Wali Kelas (YA/TIDAK)'], 
+      rows: [
+        ['Drs. Budi Santoso', '198001012005011001', 'YA'],
+      ]
+    );
+  }
+
+  Future<void> _exportData() async {
+    final teachers = ref.read(allTeachersProvider).value ?? [];
+    if (teachers.isEmpty) return;
+
+    await ExcelHelper.exportToExcel(
+      fileName: 'Data_Guru_Export.xlsx', 
+      sheetName: 'Data Guru', 
+      headers: ['Nama Lengkap', 'NIP', 'Wali Kelas'], 
+      rows: teachers.map((t) => [t.name, t.nip ?? '', t.isWaliKelas ? 'YA' : 'TIDAK']).toList()
+    );
+  }
+
+  Future<void> _processMassUpload() async {
+    final rows = await ExcelHelper.importFromExcel();
+    if (rows == null || rows.length < 2) return;
+
+    List<Teacher> temp = [];
+    for (int i = 1; i < rows.length; i++) {
+      final row = rows[i];
+      if (row.isEmpty || row[0] == null) continue;
+
+      final nama = row[0].toString();
+      final nip = row[1]?.toString();
+      final isWali = row[2]?.toString().toUpperCase() == 'YA';
+      
+      if (nama.isNotEmpty) {
+        temp.add(Teacher(
+          id: '',
+          name: nama,
+          nip: nip,
+          isWaliKelas: isWali,
+        ));
+      }
+    }
+
+    if (temp.isNotEmpty) {
+      _showPreviewDialog(temp);
+    }
+  }
+
+  void _showPreviewDialog(List<Teacher> teachers) {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Preview Import Guru & Staf', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
+          content: SizedBox(
+            width: 600,
+            height: 500,
+            child: Column(
+              children: [
+                const Text('Data berikut akan disimpan dan akun login akan dibuat otomatis.', 
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+                    child: ListView.separated(
+                      itemCount: teachers.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final t = teachers[index];
+                        return ListTile(
+                          dense: true,
+                          leading: CircleAvatar(radius: 14, backgroundColor: Colors.brown.shade50, child: const Icon(Icons.school, size: 14, color: Colors.brown)),
+                          title: Text(t.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          subtitle: Text('NIP: ${t.nip ?? "-"} | Wali Kelas: ${t.isWaliKelas ? "YA" : "TIDAK"}', style: const TextStyle(fontSize: 11)),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text('Total: ${teachers.length} Guru/Staf ditemukan', 
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.brown)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await safeCall(
+                  context: context,
+                  successMessage: 'Berhasil mengimpor ${teachers.length} guru/staf',
+                  action: () async {
+                    final service = ref.read(masterServiceProvider);
+                    for (var t in teachers) {
+                      await service.addTeacher(t);
+                    }
+                    ref.invalidate(allTeachersProvider);
+                  },
+                );
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade700, foregroundColor: Colors.white),
+              child: const Text('Simpan & Buat Akun'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final teachersAsync = ref.watch(allTeachersProvider);
@@ -155,6 +272,47 @@ class _OperatorMasterGuruState extends ConsumerState<OperatorMasterGuru> with Sa
               Wrap(
                 spacing: 8,
                 children: [
+                  OutlinedButton.icon(
+                    onPressed: _downloadTemplate,
+                    icon: const Icon(Icons.download_for_offline_outlined),
+                    label: const Text('Unduh Template'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.brown.shade700,
+                      side: BorderSide(color: Colors.brown.shade300),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _processMassUpload,
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Import Massal'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey.shade800,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _exportData,
+                    icon: const Icon(Icons.file_download),
+                    label: const Text('Ekspor Data'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      final list = ref.read(allTeachersProvider).value ?? [];
+                      if (list.isNotEmpty) {
+                        TeacherCardHelper.generateAndPrint(list);
+                      }
+                    },
+                    icon: const Icon(Icons.print),
+                    label: const Text('Cetak Kartu Login'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
                   ElevatedButton.icon(
                     onPressed: () => _showAddDialog(),
                     icon: const Icon(Icons.person_add_alt_1),

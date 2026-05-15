@@ -1,4 +1,5 @@
-import '../../../core/network/d1_service.dart';
+﻿import '../../../core/network/d1_service.dart';
+import 'package:flutter/foundation.dart';
 
 class WaliKelasService {
   final _d1Service = D1Service();
@@ -38,7 +39,7 @@ class WaliKelasService {
       final results = await _d1Service.query(sql, params: [classId]);
       return List<Map<String, dynamic>>.from(results);
     } catch (e) {
-      print("Error fetchStudentsWithParents: $e");
+      debugPrint("Error fetchStudentsWithParents: $e");
       return [];
     }
   }
@@ -97,7 +98,7 @@ class WaliKelasService {
       final sql = "INSERT INTO development_notes (class_id, teacher_id, category, note) VALUES (?, ?, ?, ?)";
       await _d1Service.query(sql, params: [classId, teacherId, category, note]);
     } catch (e) {
-      print("Error addClassNote: $e");
+      debugPrint("Error addClassNote: $e");
       rethrow;
     }
   }

@@ -22,6 +22,7 @@ class _OperatorMasterMapelState extends ConsumerState<OperatorMasterMapel> with 
   final TextEditingController _kodeController = TextEditingController();
   final TextEditingController _namaController = TextEditingController();
   final TextEditingController _kkmController = TextEditingController();
+  List<Subject> _previewSubjects = [];
 
   void _showAddDialog({Subject? subject}) {
     if (subject != null) {
@@ -206,14 +207,56 @@ class _OperatorMasterMapelState extends ConsumerState<OperatorMasterMapel> with 
     }
   }
 
-  Future<void> _processMassUpload(FilePickerResult result) async {
-    Navigator.pop(context); // Tutup dialog
+  void _processPreview(FilePickerResult result, Function(void Function()) setDialogState) {
+    final bytes = result.files.single.bytes;
+    if (bytes == null) return;
+
+    try {
+      final excel = excel_pkg.Excel.decodeBytes(bytes);
+      List<Subject> tempSubjects = [];
+
+      for (var table in excel.tables.keys) {
+        final rows = excel.tables[table]?.rows;
+        if (rows == null || rows.length < 2) continue;
+
+        for (int i = 1; i < rows.length; i++) {
+          final row = rows[i];
+          if (row.isEmpty || row[0] == null) continue;
+
+          final kode = row[0]?.value?.toString() ?? '';
+          final nama = row[1]?.value?.toString() ?? '';
+          final kkm = int.tryParse(row[2]?.value?.toString() ?? '75') ?? 75;
+
+          if (nama.isNotEmpty) {
+            tempSubjects.add(Subject(id: '', code: kode, name: nama, kkm: kkm));
+          }
+        }
+      }
+
+      setDialogState(() {
+        _previewSubjects = tempSubjects;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal membaca file: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _saveImportedSubjects() async {
+    if (_previewSubjects.isEmpty) return;
+
+    Navigator.pop(context); // Tutup dialog preview
     await safeCall(
       context: context,
-      successMessage: 'Berhasil import Mata Pelajaran!',
+      successMessage: 'Berhasil mengimpor ${_previewSubjects.length} Mata Pelajaran!',
       action: () async {
-        // LOGIKA UNTUK INSERT KE D1/CLOUDFLARE DARI FILE EXCEL / CSV BISA DITAMBAHKAN DI SINI
-        await Future.delayed(const Duration(seconds: 2)); // Simulasi
+        final service = ref.read(masterServiceProvider);
+        for (var s in _previewSubjects) {
+          await service.addSubject(s);
+        }
+        ref.invalidate(allSubjectsProvider);
+        setState(() {
+          _previewSubjects = [];
+        });
       },
     );
   }
@@ -227,67 +270,84 @@ class _OperatorMasterMapelState extends ConsumerState<OperatorMasterMapel> with 
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Import Mata Pelajaran (Bulk)', 
             style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              InkWell(
-                onTap: () async {
-                  FilePickerResult? result = await FilePicker.pickFiles(
-                    type: FileType.custom,
-                    allowedExtensions: ['xlsx', 'xls', 'csv'],
-                  );
-                  if (result != null) {
-                    setDialogState(() {
-                      selectedResult = result;
-                    });
-                  }
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  width: 350,
-                  decoration: BoxDecoration(
-                    color: selectedResult != null ? Colors.green.shade50 : Colors.brown.shade50,
+          content: SizedBox(
+            width: 500,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_previewSubjects.isEmpty)
+                  InkWell(
+                    onTap: () async {
+                      FilePickerResult? result = await FilePicker.pickFiles(
+                        type: FileType.custom,
+                        allowedExtensions: ['xlsx', 'xls', 'csv'],
+                      );
+                      if (result != null) {
+                        _processPreview(result, setDialogState);
+                      }
+                    },
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: selectedResult != null ? Colors.green.shade300 : Colors.brown.shade200),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        selectedResult != null ? Icons.check_circle_outline : Icons.cloud_upload_outlined, 
-                        size: 48, 
-                        color: selectedResult != null ? Colors.green.shade500 : Colors.brown.shade400
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.brown.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.brown.shade200),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        selectedResult != null 
-                            ? 'File Terpilih:\n${selectedResult!.files.single.name}' 
-                            : 'Klik di sini untuk memilih\nfile Excel/CSV dari komputer', 
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                        textAlign: TextAlign.center,
+                      child: Column(
+                        children: [
+                          Icon(Icons.cloud_upload_outlined, size: 48, color: Colors.brown.shade400),
+                          const SizedBox(height: 12),
+                          const Text('Klik untuk memilih file Excel', 
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                       ),
-                      if (selectedResult == null) ...[
-                        const SizedBox(height: 4),
-                        Text('Maksimal 5MB (.xlsx, .csv)', 
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                      ],
-                    ],
+                    ),
+                  )
+                else ...[
+                  const Text('Preview Data (Mohon periksa kembali):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 10),
+                  Container(
+                    height: 300,
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+                    child: ListView.separated(
+                      itemCount: _previewSubjects.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final s = _previewSubjects[index];
+                        return ListTile(
+                          dense: true,
+                          leading: CircleAvatar(backgroundColor: Colors.brown.shade100, child: Text(s.code ?? '?', style: const TextStyle(fontSize: 10, color: Colors.brown))),
+                          title: Text(s.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          subtitle: Text('KKM: ${s.kkm}', style: const TextStyle(fontSize: 10)),
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
+                  const SizedBox(height: 10),
+                  Text('Total: ${_previewSubjects.length} Mata Pelajaran', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
+                ],
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                setDialogState(() => _previewSubjects = []);
+                Navigator.pop(context);
+              },
               child: const Text('Batal'),
             ),
-            ElevatedButton(
-              onPressed: selectedResult == null ? null : () => _processMassUpload(selectedResult!),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade600, foregroundColor: Colors.white),
-              child: const Text('Mulai Import'),
-            ),
+            if (_previewSubjects.isNotEmpty)
+              ElevatedButton(
+                onPressed: _saveImportedSubjects,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white),
+                child: const Text('Simpan Sekarang'),
+              ),
           ],
         ),
       ),

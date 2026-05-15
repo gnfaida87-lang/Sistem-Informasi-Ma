@@ -23,6 +23,7 @@ class _OperatorPesertaBimbelState extends ConsumerState<OperatorPesertaBimbel> w
     }
 
     final Set<String> selectedIds = {};
+    String dialogSearchQuery = '';
 
     showDialog(
       context: context,
@@ -32,39 +33,64 @@ class _OperatorPesertaBimbelState extends ConsumerState<OperatorPesertaBimbel> w
             style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
           content: SizedBox(
             width: 600,
-            height: 400,
+            height: 500,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Menampilkan data dari Master Siswa', 
+                TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Cari Nama Siswa atau NIS...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  onChanged: (val) {
+                    setDialogState(() {
+                      dialogSearchQuery = val.toLowerCase();
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                const Text('Pilih satu atau beberapa siswa sekaligus', 
                   style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic)),
-                const SizedBox(height: 8),
+                const Divider(),
                 Expanded(
                   child: Consumer(
                     builder: (context, ref, child) {
                       final studentsAsync = ref.watch(allStudentsProvider);
                       return studentsAsync.when(
-                        data: (students) => ListView.builder(
-                          itemCount: students.length,
-                          itemBuilder: (context, index) {
-                            final s = students[index];
-                            return CheckboxListTile(
-                              title: Text(s.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                              subtitle: Text('${s.nis} | ${s.classId ?? "Tanpa Kelas"}', style: const TextStyle(fontSize: 12)),
-                              value: selectedIds.contains(s.id),
-                              onChanged: (val) {
-                                setDialogState(() {
-                                  if (val == true) {
-                                    selectedIds.add(s.id);
-                                  } else {
-                                    selectedIds.remove(s.id);
-                                  }
-                                });
-                              },
-                              activeColor: Colors.brown,
-                            );
-                          },
-                        ),
+                        data: (students) {
+                          final filtered = students.where((s) => 
+                            s.name.toLowerCase().contains(dialogSearchQuery) || 
+                            s.nis.contains(dialogSearchQuery)
+                          ).toList();
+
+                          if (filtered.isEmpty) {
+                            return const Center(child: Text('Siswa tidak ditemukan'));
+                          }
+
+                          return ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final s = filtered[index];
+                              return CheckboxListTile(
+                                title: Text(s.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                subtitle: Text('${s.nis} | ${s.classId ?? "Tanpa Kelas"}', style: const TextStyle(fontSize: 12)),
+                                value: selectedIds.contains(s.id),
+                                onChanged: (val) {
+                                  setDialogState(() {
+                                    if (val == true) {
+                                      selectedIds.add(s.id);
+                                    } else {
+                                      selectedIds.remove(s.id);
+                                    }
+                                  });
+                                },
+                                activeColor: Colors.brown,
+                              );
+                            },
+                          );
+                        },
                         loading: () => const Center(child: CircularProgressIndicator()),
                         error: (e, _) => Text('Error: $e'),
                       );
@@ -95,7 +121,7 @@ class _OperatorPesertaBimbelState extends ConsumerState<OperatorPesertaBimbel> w
                 );
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade600, foregroundColor: Colors.white),
-              child: const Text('Tambahkan Terpilih'),
+              child: Text('Tambahkan (${selectedIds.length}) Siswa'),
             ),
           ],
         ),

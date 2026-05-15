@@ -1,5 +1,7 @@
-import 'dart:async';
+﻿import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 enum AppErrorType { network, auth, notFound, validation, server, unknown }
 
@@ -60,5 +62,5 @@ AppException handleApiError(dynamic error) {
 void logError(AppException e, {String? context}) {
   final ctx = context != null ? '[$context]' : '';
   // ignore: avoid_print
-  print('[ERROR]$ctx ${e.message} | type: ${e.type} | original: ${e.originalError}');
+  debugPrint('[ERROR]$ctx ${e.message} | type: ${e.type} | original: ${e.originalError}');
 }

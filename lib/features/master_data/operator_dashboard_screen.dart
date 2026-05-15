@@ -13,7 +13,8 @@ import 'operator_master_jurusan.dart';
 import 'operator_master_ekskul.dart';
 import 'operator_master_bimbel.dart';
 import 'operator_peserta_bimbel.dart';
-import '../../shared/widgets/profile_settings_screen.dart';
+import '../../shared/widgets/shared_top_bar.dart';
+import '../../shared/widgets/shared_sidebar.dart';
 
 class OperatorDashboardScreen extends ConsumerStatefulWidget {
   const OperatorDashboardScreen({super.key});
@@ -29,7 +30,22 @@ class _OperatorDashboardScreenState extends ConsumerState<OperatorDashboardScree
   
   int _totalSiswa = 0;
   int _totalGuru = 0;
+  int _totalKelas = 0;
+  int _totalMapel = 0;
   List<Map<String, dynamic>> _recentActivities = [];
+
+  final List<Map<String, dynamic>> _menuItems = [
+    {'title': 'Dashboard', 'icon': Icons.dashboard_outlined},
+    {'title': 'Master Tahun Ajaran', 'icon': Icons.calendar_today_outlined},
+    {'title': 'Data Jurusan/Program', 'icon': Icons.account_tree_outlined},
+    {'title': 'Data Pegawai (Guru & TU)', 'icon': Icons.badge_outlined},
+    {'title': 'Data Siswa & Wali', 'icon': Icons.face_outlined},
+    {'title': 'Data Kelas', 'icon': Icons.class_outlined},
+    {'title': 'Data Mata Pelajaran', 'icon': Icons.library_books_outlined},
+    {'title': 'Master Ekstrakurikuler', 'icon': Icons.sports_basketball_outlined},
+    {'title': 'Master Program Bimbel', 'icon': Icons.auto_stories_outlined},
+    {'title': 'Peserta & Akun Bimbel', 'icon': Icons.how_to_reg_outlined},
+  ];
 
   @override
   void initState() {
@@ -45,20 +61,22 @@ class _OperatorDashboardScreenState extends ConsumerState<OperatorDashboardScree
       if (user != null) {
         final siswaData = await _d1Service.query("SELECT COUNT(*) as count FROM students WHERE is_active = 1");
         final guruData = await _d1Service.query("SELECT COUNT(*) as count FROM teachers WHERE is_active = 1");
+        final kelasData = await _d1Service.query("SELECT COUNT(*) as count FROM classes");
+        final mapelData = await _d1Service.query("SELECT COUNT(*) as count FROM subjects");
         
         List<dynamic> logData = [];
         try {
           logData = await _d1Service.query(
             "SELECT table_name, action, description, performed_at FROM audit_log ORDER BY performed_at DESC LIMIT 5"
           );
-        } catch (_) {
-          // audit_log table mungkin belum ada di D1 schema
-        }
+        } catch (_) {}
 
         if (mounted) {
           setState(() {
             _totalSiswa = (siswaData as List).isNotEmpty ? ((siswaData.first['count'] ?? 0) as num).toInt() : 0;
             _totalGuru = (guruData as List).isNotEmpty ? ((guruData.first['count'] ?? 0) as num).toInt() : 0;
+            _totalKelas = (kelasData as List).isNotEmpty ? ((kelasData.first['count'] ?? 0) as num).toInt() : 0;
+            _totalMapel = (mapelData as List).isNotEmpty ? ((mapelData.first['count'] ?? 0) as num).toInt() : 0;
             _recentActivities = List<Map<String, dynamic>>.from(logData as List);
             _isLoading = false;
           });
@@ -69,28 +87,6 @@ class _OperatorDashboardScreenState extends ConsumerState<OperatorDashboardScree
     }
   }
 
-  final List<Map<String, dynamic>> _menuItems = [
-    {'title': 'Dashboard', 'icon': Icons.dashboard_outlined},
-    {'title': 'Master Tahun Ajaran', 'icon': Icons.calendar_today_outlined},
-    {'title': 'Data Jurusan/Program', 'icon': Icons.account_tree_outlined},
-    {'title': 'Data Pegawai (Guru & TU)', 'icon': Icons.badge_outlined},
-    {'title': 'Data Siswa & Wali', 'icon': Icons.face_outlined},
-    {'title': 'Data Kelas', 'icon': Icons.class_outlined},
-    {'title': 'Data Mata Pelajaran', 'icon': Icons.library_books_outlined},
-    {'title': 'Master Ekstrakurikuler', 'icon': Icons.sports_basketball_outlined},
-    {'title': 'Master Program Bimbel', 'icon': Icons.auto_stories_outlined},
-    {'title': 'Peserta & Akun Bimbel', 'icon': Icons.how_to_reg_outlined},
-  ];
-
-  String _timeAgo(String? timeStr) {
-    if (timeStr == null) return '-';
-    final dt = DateTime.tryParse(timeStr) ?? DateTime.now();
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 60) return '${diff.inMinutes} m';
-    if (diff.inHours < 24) return '${diff.inHours} j';
-    return '${diff.inDays} h';
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 800;
@@ -99,11 +95,17 @@ class _OperatorDashboardScreenState extends ConsumerState<OperatorDashboardScree
       backgroundColor: const Color(0xFFF4F7FE),
       body: Row(
         children: [
-          if (isDesktop) _buildSidebar(),
+          if (isDesktop) 
+            SharedSidebar(
+              selectedIndex: _selectedIndex,
+              menuItems: _menuItems,
+              onItemSelected: (index) => setState(() => _selectedIndex = index),
+              accentColor: const Color(0xFF2B3674),
+            ),
           Expanded(
             child: Column(
               children: [
-                _buildTopBar(isDesktop),
+                SharedTopBar(title: _menuItems[_selectedIndex]['title']),
                 Expanded(
                   child: ClipRRect(
                     borderRadius: const BorderRadius.only(
@@ -120,129 +122,14 @@ class _OperatorDashboardScreenState extends ConsumerState<OperatorDashboardScree
           ),
         ],
       ),
-      drawer: !isDesktop ? Drawer(child: _buildSidebar()) : null,
-    );
-  }
-
-  Widget _buildSidebar() {
-    return Container(
-      width: 250,
-      color: Colors.white,
-      child: Column(
-        children: [
-          Container(
-            height: 70,
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2B3674),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.storage, color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'SI Madrasah',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2B3674),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _menuItems.length,
-              itemBuilder: (context, index) {
-                final isSelected = _selectedIndex == index;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                  child: InkWell(
-                    onTap: () {
-                      setState(() => _selectedIndex = index);
-                      if (MediaQuery.of(context).size.width <= 800) {
-                        Navigator.pop(context);
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFFF4F7FE) : Colors.transparent,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _menuItems[index]['icon'],
-                            color: isSelected ? const Color(0xFF2B3674) : Colors.grey.shade500,
-                            size: 22,
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              _menuItems[index]['title'],
-                              style: TextStyle(
-                                color: isSelected ? const Color(0xFF2B3674) : Colors.grey.shade600,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                fontSize: 13,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopBar(bool isDesktop) {
-    return Container(
-      height: 70,
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          if (!isDesktop)
-            IconButton(
-              icon: const Icon(Icons.menu, color: Colors.grey),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-          const Spacer(),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Text('Operator Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2B3674))),
-              Text('SI Madrasah', style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(width: 12),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.red),
-            onPressed: () {
-              ref.read(authProvider.notifier).logout();
-              context.go(AppRoutes.login);
-            },
-          ),
-        ],
-      ),
+      drawer: !isDesktop ? Drawer(
+        child: SharedSidebar(
+          selectedIndex: _selectedIndex,
+          menuItems: _menuItems,
+          onItemSelected: (index) => setState(() => _selectedIndex = index),
+          accentColor: const Color(0xFF2B3674),
+        ),
+      ) : null,
     );
   }
 
@@ -296,8 +183,8 @@ class _OperatorDashboardScreenState extends ConsumerState<OperatorDashboardScree
       children: [
         _buildStatCard(Colors.blue, _totalSiswa.toString(), 'Siswa', Icons.groups),
         _buildStatCard(Colors.green, _totalGuru.toString(), 'Guru', Icons.badge),
-        _buildStatCard(Colors.orange, '0', 'Kelas', Icons.meeting_room),
-        _buildStatCard(Colors.purple, '0', 'Mapel', Icons.auto_stories),
+        _buildStatCard(Colors.orange, _totalKelas.toString(), 'Kelas', Icons.meeting_room),
+        _buildStatCard(Colors.purple, _totalMapel.toString(), 'Mapel', Icons.auto_stories),
       ],
     );
   }
@@ -356,5 +243,23 @@ class _OperatorDashboardScreenState extends ConsumerState<OperatorDashboardScree
         ],
       ),
     );
+  }
+
+  String _timeAgo(dynamic dateTime) {
+    if (dateTime == null) return '-';
+    DateTime dt;
+    if (dateTime is DateTime) {
+      dt = dateTime;
+    } else if (dateTime is String) {
+      dt = DateTime.tryParse(dateTime) ?? DateTime.now();
+    } else {
+      return '-';
+    }
+
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays > 0) return '${diff.inDays} hari yang lalu';
+    if (diff.inHours > 0) return '${diff.inHours} jam yang lalu';
+    if (diff.inMinutes > 0) return '${diff.inMinutes} menit yang lalu';
+    return 'Baru saja';
   }
 }

@@ -11,6 +11,8 @@ class HeadmasterAcademicReport extends StatefulWidget {
 class _HeadmasterAcademicReportState extends State<HeadmasterAcademicReport> {
   final _d1Service = D1Service();
   List<Map<String, dynamic>> _classStats = [];
+  int _totalStudents = 0;
+  int _totalTeachers = 0;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -27,7 +29,8 @@ class _HeadmasterAcademicReportState extends State<HeadmasterAcademicReport> {
     });
 
     try {
-      final data = await _d1Service.query(
+      // 1. Ambil data kelas
+      final classData = await _d1Service.query(
         """
         SELECT k.*, g.nama as guru_nama 
         FROM kelas k
@@ -36,8 +39,16 @@ class _HeadmasterAcademicReportState extends State<HeadmasterAcademicReport> {
         """
       );
       
+      // 2. Ambil total siswa
+      final studentRes = await _d1Service.query("SELECT COUNT(*) as total FROM siswa");
+      
+      // 3. Ambil total guru
+      final teacherRes = await _d1Service.query("SELECT COUNT(*) as total FROM guru");
+
       setState(() {
-        _classStats = List<Map<String, dynamic>>.from(data as List);
+        _classStats = List<Map<String, dynamic>>.from(classData as List);
+        _totalStudents = (studentRes as List).isNotEmpty ? studentRes.first['total'] : 0;
+        _totalTeachers = (teacherRes as List).isNotEmpty ? teacherRes.first['total'] : 0;
         _isLoading = false;
       });
     } catch (e) {
@@ -59,6 +70,21 @@ class _HeadmasterAcademicReportState extends State<HeadmasterAcademicReport> {
             'Laporan Akademik',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2B3674)),
           ),
+          const SizedBox(height: 24),
+          
+          // SUMMARY CARDS
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard('Total Siswa', _totalStudents.toString(), Icons.people, Colors.blue),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildStatCard('Guru & Staf', _totalTeachers.toString(), Icons.school, Colors.purple),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
           const SizedBox(height: 24),
           _buildClassTable(),
         ],
@@ -106,6 +132,27 @@ class _HeadmasterAcademicReportState extends State<HeadmasterAcademicReport> {
                 }).toList(),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 12),
+          Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
         ],
       ),
     );

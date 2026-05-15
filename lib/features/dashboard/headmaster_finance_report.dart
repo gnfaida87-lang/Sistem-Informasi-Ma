@@ -15,6 +15,8 @@ class _HeadmasterFinanceReportState extends State<HeadmasterFinanceReport> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  double _totalIncomeMonth = 0;
+
   @override
   void initState() {
     super.initState();
@@ -28,7 +30,8 @@ class _HeadmasterFinanceReportState extends State<HeadmasterFinanceReport> {
     });
 
     try {
-      final data = await _d1Service.query(
+      // 1. Ambil transaksi terbaru
+      final txData = await _d1Service.query(
         """
         SELECT p.*, s.nama as siswa_nama
         FROM pembayaran_spp p
@@ -38,8 +41,18 @@ class _HeadmasterFinanceReportState extends State<HeadmasterFinanceReport> {
         """
       );
       
+      // 2. Ambil total bulan ini
+      final now = DateTime.now();
+      final monthStr = now.month.toString().padLeft(2, '0');
+      final yearStr = now.year.toString();
+      final summaryRes = await _d1Service.query(
+        "SELECT SUM(amount) as total FROM pembayaran_spp WHERE paid_at LIKE ?",
+        params: ["$yearStr-$monthStr%"]
+      );
+      
       setState(() {
-        _recentTransactions = List<Map<String, dynamic>>.from(data as List);
+        _recentTransactions = List<Map<String, dynamic>>.from(txData as List);
+        _totalIncomeMonth = (summaryRes as List).isNotEmpty ? (summaryRes.first['total'] ?? 0).toDouble() : 0;
         _isLoading = false;
       });
     } catch (e) {
@@ -52,6 +65,8 @@ class _HeadmasterFinanceReportState extends State<HeadmasterFinanceReport> {
 
   @override
   Widget build(BuildContext context) {
+    final currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+
     return RefreshIndicator(
       onRefresh: _fetchFinanceData,
       child: SingleChildScrollView(
@@ -65,9 +80,55 @@ class _HeadmasterFinanceReportState extends State<HeadmasterFinanceReport> {
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2B3674)),
             ),
             const SizedBox(height: 24),
+            
+            // SUMMARY CARDS
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSummaryCard(
+                    'Penerimaan Bulan Ini', 
+                    currencyFormat.format(_totalIncomeMonth), 
+                    Icons.payments, 
+                    Colors.green
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildSummaryCard(
+                    'Target Bulanan', 
+                    '-', 
+                    Icons.ads_click, 
+                    Colors.blue
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
             _buildTransactionList(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 12),
+          Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
+        ],
       ),
     );
   }

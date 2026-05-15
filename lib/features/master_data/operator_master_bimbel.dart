@@ -193,6 +193,7 @@ class _OperatorMasterBimbelState extends ConsumerState<OperatorMasterBimbel> wit
                           columns: const [
                             DataColumn(label: Text('Nama Program', style: TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text('Guru Pengampu', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text('Peserta', style: TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
                           ],
                           rows: list.map((b) {
@@ -221,6 +222,32 @@ class _OperatorMasterBimbelState extends ConsumerState<OperatorMasterBimbel> wit
       cells: [
         DataCell(Text(bimbel.name, style: const TextStyle(fontWeight: FontWeight.bold))),
         DataCell(Text(teacherName)),
+        DataCell(
+          Consumer(
+            builder: (context, ref, child) {
+              final participantsAsync = ref.watch(bimbelParticipantsProvider(bimbel.id));
+              return participantsAsync.when(
+                data: (list) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: list.isNotEmpty ? Colors.blue.shade50 : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${list.length} Siswa',
+                    style: TextStyle(
+                      fontSize: 11, 
+                      fontWeight: FontWeight.bold,
+                      color: list.isNotEmpty ? Colors.blue.shade700 : Colors.grey,
+                    ),
+                  ),
+                ),
+                loading: () => const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 2)),
+                error: (_, __) => const Text('?'),
+              );
+            },
+          ),
+        ),
         DataCell(
           Row(
             children: [

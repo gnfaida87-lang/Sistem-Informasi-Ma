@@ -1,5 +1,7 @@
-import '../../../core/network/d1_service.dart';
+﻿import '../../../core/network/d1_service.dart';
+import 'package:flutter/foundation.dart';
 import '../models/promotion_models.dart';
+import 'package:flutter/foundation.dart';
 
 class PromotionService {
   final _d1Service = D1Service();
@@ -10,7 +12,7 @@ class PromotionService {
       final results = await _d1Service.query(sql);
       return results.map((e) => PromotionCriteria.fromJson(e)).toList();
     } catch (e) {
-      print("Error fetchCriteria: $e");
+      debugPrint("Error fetchCriteria: $e");
       return [];
     }
   }
@@ -28,7 +30,7 @@ class PromotionService {
       final results = await _d1Service.query(sql, params: params);
       return results.map((e) => Alumni.fromJson(e)).toList();
     } catch (e) {
-      print("Error fetchAlumni: $e");
+      debugPrint("Error fetchAlumni: $e");
       return [];
     }
   }
@@ -75,7 +77,7 @@ class PromotionService {
 
       return evaluations;
     } catch (e) {
-      print("Error fetchPromotionEvaluations: $e");
+      debugPrint("Error fetchPromotionEvaluations: $e");
       return [];
     }
   }
@@ -90,7 +92,7 @@ class PromotionService {
         criteria.category
       ]);
     } catch (e) {
-      print("Error addCriteria: $e");
+      debugPrint("Error addCriteria: $e");
       rethrow;
     }
   }
@@ -100,7 +102,7 @@ class PromotionService {
       const sql = "UPDATE promotion_criteria SET title = ?, value = ?, category = ? WHERE id = ?";
       await _d1Service.query(sql, params: [criteria.title, criteria.value, criteria.category, criteria.id]);
     } catch (e) {
-      print("Error updateCriteria: $e");
+      debugPrint("Error updateCriteria: $e");
       rethrow;
     }
   }
@@ -110,7 +112,7 @@ class PromotionService {
       const sql = "UPDATE promotion_criteria SET is_active = 0 WHERE id = ?";
       await _d1Service.query(sql, params: [id]);
     } catch (e) {
-      print("Error deleteCriteria: $e");
+      debugPrint("Error deleteCriteria: $e");
       rethrow;
     }
   }
@@ -140,7 +142,7 @@ class PromotionService {
         await _d1Service.query(sql, params: [targetClassId, ...studentIds]);
       }
     } catch (e) {
-      print("Error executeMassPromotion: $e");
+      debugPrint("Error executeMassPromotion: $e");
       rethrow;
     }
   }

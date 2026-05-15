@@ -23,22 +23,23 @@ class SppRecord {
 
   factory SppRecord.fromJson(Map<String, dynamic> json) => SppRecord(
         id: json['id'],
-        studentId: json['student_id'],
-        studentName: json['siswa']?['nama'],
-        amount: (json['amount'] as num).toDouble(),
-        paidAt: DateTime.parse(json['paid_at']),
-        status: json['status'],
-        month: json['month'],
-        year: json['year'],
+        studentId: json['siswa_id'] ?? json['student_id'] ?? '',
+        studentName: json['student_name'] ?? json['siswa']?['nama'],
+        amount: ((json['amount'] ?? json['jumlah'] ?? 0) as num).toDouble(),
+        paidAt: DateTime.parse(json['tanggal_bayar'] ?? json['paid_at'] ?? DateTime.now().toIso8601String()),
+        status: json['status'] ?? 'lunas',
+        month: json['bulan'] ?? json['month'],
+        year: json['tahun'] ?? json['year'],
       );
 
   Map<String, dynamic> toJson() => {
-        'student_id': studentId,
+        'id': id,
+        'siswa_id': studentId,
         'amount': amount,
-        'paid_at': paidAt.toIso8601String(),
+        'tanggal_bayar': paidAt.toIso8601String(),
         'status': status,
-        'month': month,
-        'year': year,
+        'bulan': month,
+        'tahun': year,
       };
 }
 
@@ -61,17 +62,18 @@ class Savings {
 
   factory Savings.fromJson(Map<String, dynamic> json) => Savings(
         id: json['id'],
-        studentId: json['student_id'],
-        studentName: json['siswa']?['nama'],
-        amount: (json['amount'] as num).toDouble(),
-        savedAt: DateTime.parse(json['saved_at']),
+        studentId: json['siswa_id'] ?? json['student_id'] ?? '',
+        studentName: json['student_name'] ?? json['siswa']?['nama'],
+        amount: ((json['amount'] ?? json['jumlah'] ?? 0) as num).toDouble(),
+        savedAt: DateTime.parse(json['tanggal'] ?? json['saved_at'] ?? DateTime.now().toIso8601String()),
         type: json['type'],
       );
 
   Map<String, dynamic> toJson() => {
-        'student_id': studentId,
+        'id': id,
+        'siswa_id': studentId,
         'amount': amount,
-        'saved_at': savedAt.toIso8601String(),
+        'tanggal': savedAt.toIso8601String(),
         'type': type,
       };
 }
@@ -95,19 +97,16 @@ class OtherFee {
     required this.status,
   });
 
-  /// Alias untuk nama jenis tagihan (digunakan di UI)
   String get type => name;
-
-  /// Status lunas: true jika status == 'lunas'
   bool get isPaid => status == 'lunas';
 
   factory OtherFee.fromJson(Map<String, dynamic> json) => OtherFee(
         id: json['id'],
         name: json['name'],
-        amount: (json['amount'] as num).toDouble(),
-        studentId: json['student_id'],
-        studentName: json['siswa']?['nama'],
-        dueDate: DateTime.parse(json['due_date']),
+        amount: ((json['amount'] ?? json['jumlah'] ?? 0) as num).toDouble(),
+        studentId: json['siswa_id'] ?? json['student_id'] ?? '',
+        studentName: json['student_name'] ?? json['siswa']?['nama'],
+        dueDate: DateTime.parse(json['tenggat_waktu'] ?? json['due_date'] ?? DateTime.now().toIso8601String()),
         status: json['status'],
       );
 }
@@ -130,11 +129,19 @@ class OperationalExpense {
   factory OperationalExpense.fromJson(Map<String, dynamic> json) =>
       OperationalExpense(
         id: json['id'],
-        description: json['description'],
-        amount: (json['amount'] as num).toDouble(),
-        date: DateTime.parse(json['date']),
-        category: json['category'],
+        description: json['keterangan'] ?? json['description'] ?? '',
+        amount: ((json['amount'] ?? json['jumlah'] ?? 0) as num).toDouble(),
+        date: DateTime.parse(json['tanggal'] ?? json['date'] ?? DateTime.now().toIso8601String()),
+        category: json['kategori'] ?? json['category'] ?? 'Umum',
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'keterangan': description,
+        'amount': amount,
+        'tanggal': date.toIso8601String(),
+        'kategori': category,
+      };
 
   OperationalExpense copyWith({
     String? id,
@@ -151,13 +158,6 @@ class OperationalExpense {
       category: category ?? this.category,
     );
   }
-
-  Map<String, dynamic> toJson() => {
-        'description': description,
-        'amount': amount,
-        'date': date.toIso8601String(),
-        'category': category,
-      };
 }
 
 class FinanceReport {
@@ -177,13 +177,7 @@ class FinanceReport {
     required this.year,
   });
 
-  /// Alias: total pemasukan SPP
   double get totalSpp => totalSppIn;
-
-  /// Alias: total pengeluaran operasional
   double get totalOperationalExpenses => totalExpenses;
-
-  /// Net cash flow = (SPP + tagihan lain) - pengeluaran
   double get netIncome => totalSppIn + totalOtherFees - totalExpenses;
 }
-

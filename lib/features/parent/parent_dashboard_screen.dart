@@ -2,12 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'presentation/parent_jadwal_widget.dart';
+import 'presentation/parent_materi_screen.dart';
+import 'presentation/parent_bimbel_screen.dart';
+import 'presentation/parent_akademik_screen.dart';
+import 'presentation/parent_keuangan_screen.dart';
+import 'presentation/parent_tabungan_screen.dart';
 import 'parent_submenus_screen.dart';
 import '../../core/router/app_router.dart';
 import '../../core/mixins/safe_async_mixin.dart';
 import '../../core/providers/auth_provider.dart';
 import 'services/parent_service.dart';
 import 'models/parent_models.dart';
+import 'package:file_picker/file_picker.dart';
+import '../../core/network/d1_service.dart';
+import '../../core/providers/system_provider.dart';
+import '../../core/utils/context_extensions.dart';
+
+import '../../shared/widgets/shared_top_bar.dart';
 
 class ParentDashboardScreen extends ConsumerStatefulWidget {
   const ParentDashboardScreen({super.key});
@@ -18,6 +29,7 @@ class ParentDashboardScreen extends ConsumerStatefulWidget {
 
 class _ParentDashboardScreenState extends ConsumerState<ParentDashboardScreen> with SafeAsync {
   int _currentIndex = 0;
+  bool _isLoading = false;
   final _parentService = ParentService();
   ParentChildProfile? _profile;
   ChildAttendanceSummary? _attendanceToday;
@@ -63,6 +75,7 @@ class _ParentDashboardScreenState extends ConsumerState<ParentDashboardScreen> w
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
+      appBar: _currentIndex == 0 ? const SharedTopBar(title: 'Portal Orang Tua', showDrawer: false, showLogout: false) : null,
       body: SafeArea(
         child: _buildCurrentTab(),
       ),
@@ -88,15 +101,43 @@ class _ParentDashboardScreenState extends ConsumerState<ParentDashboardScreen> w
           selectedItemColor: Colors.deepOrange.shade700,
           unselectedItemColor: Colors.grey.shade400,
           showUnselectedLabels: true,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-          unselectedLabelStyle: const TextStyle(fontSize: 11),
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Beranda'),
-            BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Jadwal'),
-            BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Keuangan'),
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil Saya'),
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+          unselectedLabelStyle: const TextStyle(fontSize: 10),
+          items: [
+            const BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Beranda'),
+            const BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Jadwal'),
+            BottomNavigationBarItem(
+              icon: Badge(
+                label: Text(_pendingBillsCount.toString()),
+                isLabelVisible: _pendingBillsCount > 0,
+                child: const Icon(Icons.account_balance_wallet),
+              ), 
+              label: 'Pembayaran'
+            ),
+            const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showLogoutConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi Keluar'),
+        content: const Text('Apakah Anda yakin ingin keluar dari aplikasi?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(authProvider.notifier).logout();
+              context.go(AppRoutes.login);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Keluar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
@@ -122,39 +163,27 @@ class _ParentDashboardScreenState extends ConsumerState<ParentDashboardScreen> w
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const CircleAvatar(
-                radius: 24,
-                backgroundColor: Colors.deepOrange,
-                child: Icon(Icons.person, color: Colors.white, size: 28),
+          if (_profile != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.blue.shade200)),
+              child: Row(
+                children: [
+                  Icon(Icons.face, color: Colors.blue.shade700, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Anak: ${_profile?.childName ?? '...'} (${_profile?.childClass ?? '...'})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
+                      Text('Wali Kelas: ${_profile?.waliKelasName ?? '-'}', style: TextStyle(fontSize: 10, color: Colors.blue.shade700)),
+                    ],
+                  )),
+                ],
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Portal Wali Murid,', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                    Text(_profile?.parentName ?? 'Memuat...', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)),
-                      child: Text('Anak: ${_profile?.childName ?? '...'} (${_profile?.childClass ?? '...'})', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
-                    ),
-                    const SizedBox(height: 4),
-                    Text('Wali Kelas: ${_profile?.waliKelasName ?? '...'}', style: TextStyle(fontSize: 10, color: Colors.grey.shade600, fontStyle: FontStyle.italic)),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.deepOrange.shade50, shape: BoxShape.circle),
-                child: Icon(Icons.notifications_active, color: Colors.deepOrange.shade700),
-              )
-            ],
-          ),
-          const SizedBox(height: 24),
+            ),
+            const SizedBox(height: 20),
+          ],
 
           Container(
             padding: const EdgeInsets.all(20),
@@ -208,7 +237,7 @@ class _ParentDashboardScreenState extends ConsumerState<ParentDashboardScreen> w
             childAspectRatio: 0.85,
             children: [
               _buildMenuIcon(context, 'Akademik', Icons.school_rounded, Colors.blue, _showSubmenuAkademik),
-              _buildMenuIcon(context, 'Keuangan', Icons.account_balance_wallet_rounded, Colors.green, _showSubmenuKeuangan),
+              _buildMenuIcon(context, 'Pembayaran\n& Lainnya', Icons.account_balance_wallet_rounded, Colors.green, _showSubmenuKeuangan),
               _buildMenuIcon(context, 'Jadwal', Icons.event_note_rounded, Colors.orange, _showSubmenuJadwal),
               _buildMenuIcon(context, 'Materi\n& Tugas', Icons.library_books_rounded, Colors.purple, _showSubmenuMateri),
               _buildMenuIcon(context, 'Bimbel', Icons.groups_rounded, Colors.teal, _showSubmenuBimbel),
@@ -221,6 +250,7 @@ class _ParentDashboardScreenState extends ConsumerState<ParentDashboardScreen> w
               _buildMenuIcon(context, 'Pengumuman', Icons.campaign_rounded, Colors.red, () {
                 context.push(AppRoutes.announcementParent);
               }),
+              _buildMenuIcon(context, 'Tabungan', Icons.account_balance_rounded, Colors.orange, _showSubmenuTabungan),
             ],
           ),
           const SizedBox(height: 40),
@@ -230,23 +260,80 @@ class _ParentDashboardScreenState extends ConsumerState<ParentDashboardScreen> w
   }
 
   void _showSubmenuAkademik() {
-    _showComingSoon('Menu Akademik');
+    if (_profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Akun Anda belum terhubung dengan data siswa manapun.'), behavior: SnackBarBehavior.floating));
+      return;
+    }
+
+    // Ekstrak level kelas (X, XI, atau XII) dari string kelas (misal: "Kelas X-A")
+    String classLevel = 'X'; 
+    if (_profile!.childClass.contains('XII')) {
+      classLevel = 'XII';
+    } else if (_profile!.childClass.contains('XI')) {
+      classLevel = 'XI';
+    }
+
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ParentAkademikScreen(
+      studentId: _profile!.childId,
+      studentName: _profile!.childName,
+      classLevel: classLevel,
+    )));
   }
 
   void _showSubmenuKeuangan() {
-    _showComingSoon('Menu Keuangan');
+    if (_profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Akun Anda belum terhubung dengan data siswa manapun.'), behavior: SnackBarBehavior.floating));
+      return;
+    }
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ParentKeuanganScreen(
+      studentId: _profile!.childId,
+      studentName: _profile!.childName,
+    )));
+  }
+
+  void _showSubmenuTabungan() {
+    if (_profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Akun Anda belum terhubung dengan data siswa manapun.'), behavior: SnackBarBehavior.floating));
+      return;
+    }
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ParentTabunganScreen(
+      studentId: _profile!.childId,
+      studentName: _profile!.childName,
+    )));
   }
 
   void _showSubmenuJadwal() {
-    _showComingSoon('Menu Jadwal');
+    setState(() => _currentIndex = 1);
   }
 
   void _showSubmenuMateri() {
-    _showComingSoon('Materi & Tugas');
+    if (_profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Data anak belum dimuat, coba refresh'),
+        behavior: SnackBarBehavior.floating));
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ParentMateriScreen(studentId: _profile!.childId),
+      ),
+    );
   }
 
   void _showSubmenuBimbel() {
-    _showComingSoon('Menu Bimbel');
+    if (_profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Data anak belum dimuat, coba refresh'),
+        behavior: SnackBarBehavior.floating));
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ParentBimbelScreen(studentId: _profile!.childId),
+      ),
+    );
   }
 
   Widget _buildMenuIcon(BuildContext context, String title, IconData icon, MaterialColor color, VoidCallback onTap) {
@@ -301,35 +388,146 @@ class _ParentDashboardScreenState extends ConsumerState<ParentDashboardScreen> w
     );
   }
 
+  Future<void> _pickAndUploadProfile() async {
+    final result = await FilePicker.pickFiles(type: FileType.image, withData: true);
+    if (result != null && result.files.first.bytes != null) {
+      final file = result.files.first;
+      final userId = ref.read(authProvider).user?.id;
+      if (userId == null) return;
+
+      setState(() => _isLoading = true);
+      try {
+        final d1 = D1Service();
+        final uploadResult = await d1.uploadFile(
+          file.bytes!,
+          'profile_parent_${userId}_${DateTime.now().millisecondsSinceEpoch}.${file.extension}',
+        );
+
+        if (uploadResult['success'] == true) {
+          final previewLink = uploadResult['fileUrl'];
+          await d1.query("UPDATE users SET profile_url = ? WHERE id = ?", params: [previewLink, userId]);
+          _initDashboard(); // Refresh data
+          if (mounted) context.showSuccessSnackBar('Foto profil berhasil diperbarui!');
+        } else {
+          if (mounted) context.showErrorSnackBar('Gagal mengunggah: ${uploadResult['message']}');
+        }
+      } catch (e) {
+        if (mounted) context.showErrorSnackBar('Gagal mengunggah: $e');
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
   Widget _buildAkunTab() {
+    final user = ref.read(authProvider).user;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Text('Pengaturan Akun Wali Murid', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2B3674))),
-          const SizedBox(height: 32),
-          const CircleAvatar(
-            radius: 50,
-            backgroundColor: Colors.deepOrange,
-            child: Icon(Icons.person, size: 50, color: Colors.white),
+          const Text(
+            'Profil Pengguna',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
           ),
-          const SizedBox(height: 16),
-          Text(_profile?.parentName ?? 'Orang Tua', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          Text('Wali Murid: ${_profile?.childName ?? '...'}', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
           const SizedBox(height: 32),
+          Stack(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.deepOrange.shade100, width: 2),
+                ),
+                child: CircleAvatar(
+                  radius: 65,
+                  backgroundColor: Colors.grey.shade200,
+                  backgroundImage: (user?.profileUrl != null && user!.profileUrl!.isNotEmpty) 
+                      ? NetworkImage(user.profileUrl!) 
+                      : null,
+                  child: (user?.profileUrl == null || user!.profileUrl!.isEmpty) 
+                      ? Icon(Icons.person, size: 70, color: Colors.grey.shade400) 
+                      : null,
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: FloatingActionButton.small(
+                  onPressed: _pickAndUploadProfile,
+                  backgroundColor: Colors.deepOrange,
+                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          _buildProfileItem('NAMA ORANG TUA', _profile?.parentName ?? user?.fullName ?? '-', Icons.person_outline),
+          _buildProfileItem('NAMA ANAK', _profile?.childName ?? '-', Icons.child_care),
+          _buildProfileItem('NIS / NIM ANAK', _profile?.childNis ?? '-', Icons.badge_outlined),
+          const SizedBox(height: 48),
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () {
-                ref.read(authProvider.notifier).logout();
-                context.go(AppRoutes.login);
-              },
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: const Text('Keluar Aplikasi (Logout)'),
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: _showLogoutConfirmation,
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Keluar dari Aplikasi', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
             ),
           ),
+          const SizedBox(height: 20),
+          Text(
+            'Versi 2.0.1 - Sistem Informasi Madrasah',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildProfileItem(String label, String value, IconData icon) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.deepOrange.shade300, size: 22),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1)),
+              const SizedBox(height: 4),
+              Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF1E3A8A),
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }

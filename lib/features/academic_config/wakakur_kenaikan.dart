@@ -21,6 +21,8 @@ class _WakakurKenaikanKelasState extends ConsumerState<WakakurKenaikanKelas> wit
   String? _selectedFromClassId;
   String? _selectedToClassId;
   List<Map<String, dynamic>> _evaluations = [];
+  List<Map<String, dynamic>> _filteredEvaluations = [];
+  String _studentSearchQuery = '';
   bool _isLoadingEvaluations = false;
 
   // State for Tab 3
@@ -423,13 +425,63 @@ class _WakakurKenaikanKelasState extends ConsumerState<WakakurKenaikanKelas> wit
           const Expanded(child: Center(child: CircularProgressIndicator()))
         else if (_evaluations.isEmpty)
           const Expanded(child: Center(child: Text('Pilih kelas asal untuk melihat daftar evaluasi siswa.')))
-        else
+        else ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    onChanged: (val) {
+                      setState(() {
+                        _studentSearchQuery = val.toLowerCase();
+                        _filteredEvaluations = _evaluations.where((e) => 
+                          e['name'].toString().toLowerCase().contains(_studentSearchQuery) || 
+                          e['student_id'].toString().toLowerCase().contains(_studentSearchQuery)
+                        ).toList();
+                      });
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Cari Nama / NIS...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      for (var e in _filteredEvaluations) {
+                        e['manual_status'] = true;
+                      }
+                    });
+                  },
+                  icon: const Icon(Icons.check_box_outlined, size: 18),
+                  label: const Text('Pilih Semua Hasil'),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      for (var e in _filteredEvaluations) {
+                        e['manual_status'] = false;
+                      }
+                    });
+                  },
+                  icon: const Icon(Icons.check_box_outline_blank, size: 18),
+                  label: const Text('Kosongkan'),
+                  style: TextButton.styleFrom(foregroundColor: Colors.grey),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              itemCount: _evaluations.length,
+              itemCount: _filteredEvaluations.length,
               itemBuilder: (context, index) {
-                final eval = _evaluations[index];
+                final eval = _filteredEvaluations[index];
                 final isRecommended = eval['is_recommended'] as bool;
                 
                 return Card(
@@ -453,6 +505,7 @@ class _WakakurKenaikanKelasState extends ConsumerState<WakakurKenaikanKelas> wit
               },
             ),
           ),
+        ],
       ],
     );
   }
@@ -466,6 +519,7 @@ class _WakakurKenaikanKelasState extends ConsumerState<WakakurKenaikanKelas> wit
       final results = await service.fetchPromotionEvaluations(_selectedFromClassId!);
       setState(() {
         _evaluations = results;
+        _filteredEvaluations = results;
         _isLoadingEvaluations = false;
       });
     } catch (e) {

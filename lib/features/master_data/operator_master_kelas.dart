@@ -209,13 +209,16 @@ class _OperatorMasterKelasState extends ConsumerState<OperatorMasterKelas> with 
   }
 
   Widget _buildClassCard(ClassRoom classRoom) {
+    final double percent = (classRoom.jumlahSiswa / classRoom.kapasitas).clamp(0.0, 1.0);
+    final bool isFull = classRoom.jumlahSiswa >= classRoom.kapasitas;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200, width: 1),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isFull ? Colors.red.shade100 : Colors.grey.shade200, width: 1.5),
+        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.06), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,7 +226,22 @@ class _OperatorMasterKelasState extends ConsumerState<OperatorMasterKelas> with 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(classRoom.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF2B3674))),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(classRoom.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF2B3674))),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.person_pin, size: 14, color: Colors.brown.shade400),
+                      const SizedBox(width: 4),
+                      Text(classRoom.waliKelasNama ?? "Wali Kelas Belum Diatur", 
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontWeight: FontWeight.w500)
+                      ),
+                    ],
+                  ),
+                ],
+              ),
               PopupMenuButton<String>(
                 onSelected: (val) {
                   if (val == 'delete') {
@@ -233,42 +251,41 @@ class _OperatorMasterKelasState extends ConsumerState<OperatorMasterKelas> with 
                   }
                 },
                 itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Edit Kelas')])),
-                  const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus Kelas')])),
+                  const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18, color: Colors.blue), SizedBox(width: 8), Text('Edit Rombel')])),
+                  const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 18, color: Colors.red), SizedBox(width: 8), Text('Hapus Rombel')])),
                 ],
-                child: Icon(Icons.more_horiz, color: Colors.grey.shade400),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(color: Colors.grey.shade50, shape: BoxShape.circle),
+                  child: Icon(Icons.more_vert, color: Colors.grey.shade500, size: 20),
+                ),
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          // Note: Wali Kelas name would need another fetch or join, for now showing ID or "Belum Diatur"
-          Text('Wali Kelas: ${classRoom.waliKelasId ?? "Belum Diatur"}', 
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 13)
           ),
           const Spacer(),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Kapasitas', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
-                  Text('${classRoom.kapasitas} Siswa', 
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)
-                  ),
-                ],
+              Text('${classRoom.jumlahSiswa} / ${classRoom.kapasitas} Siswa', 
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isFull ? Colors.red : Colors.green.shade700)
               ),
-              OutlinedButton(
-                onPressed: null,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.brown.shade700,
-                  side: BorderSide(color: Colors.brown.shade200),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  minimumSize: const Size(0, 30),
+              if (isFull)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4)),
+                  child: const Text('PENUH', style: TextStyle(color: Colors.red, fontSize: 9, fontWeight: FontWeight.bold)),
                 ),
-                child: const Text('Kelola', style: TextStyle(fontSize: 12)),
-              )
             ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: percent,
+              backgroundColor: Colors.grey.shade100,
+              color: isFull ? Colors.red : (percent > 0.8 ? Colors.orange : Colors.green),
+              minHeight: 8,
+            ),
           ),
         ],
       ),

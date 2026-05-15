@@ -1,5 +1,7 @@
-import '../../../core/network/d1_service.dart';
+﻿import '../../../core/network/d1_service.dart';
+import 'package:flutter/foundation.dart';
 import '../models/announcement.dart';
+import 'package:flutter/foundation.dart';
 
 class AnnouncementService {
   final _d1Service = D1Service();
@@ -10,7 +12,7 @@ class AnnouncementService {
       final results = await _d1Service.query(sql);
       return results.map((json) => Announcement.fromJson(json)).toList();
     } catch (e) {
-      print('Error fetching announcements: $e');
+      debugPrint('Error fetching announcements: $e');
       return [];
     }
   }
@@ -27,7 +29,7 @@ class AnnouncementService {
       ]);
       return true;
     } catch (e) {
-      print('Error creating announcement: $e');
+      debugPrint('Error creating announcement: $e');
       return false;
     }
   }

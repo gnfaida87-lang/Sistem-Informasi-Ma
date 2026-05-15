@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../teacher/services/bimbel_service.dart';
 
 class WakakurLaporanBimbel extends StatefulWidget {
   const WakakurLaporanBimbel({super.key});
@@ -8,6 +9,43 @@ class WakakurLaporanBimbel extends StatefulWidget {
 }
 
 class _WakakurLaporanBimbelState extends State<WakakurLaporanBimbel> {
+  final _bimbelService = BimbelService();
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _programSummaries = [];
+  int _totalStudents = 0;
+  int _totalPrograms = 0;
+  double _avgAttendance = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      final summaries = await _bimbelService.fetchProgramSummaries();
+      
+      int totalS = 0;
+      double totalAvg = 0;
+      for (var s in summaries) {
+        totalS += (s['student_count'] as int);
+        totalAvg += (s['avg_score'] ?? 0.0);
+      }
+
+      setState(() {
+        _programSummaries = summaries;
+        _totalPrograms = summaries.length;
+        _totalStudents = totalS;
+        _avgAttendance = summaries.isNotEmpty ? (totalAvg / summaries.length) : 0;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Error load bimbel report: $e");
+      setState(() => _isLoading = false);
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -61,11 +99,11 @@ class _WakakurLaporanBimbelState extends State<WakakurLaporanBimbel> {
   Widget _buildStatsSummary() {
     return Row(
       children: [
-        _buildStatCard('Total Peserta Aktif', '124', 'Siswa Terdaftar', Icons.groups, Colors.blue),
+        _buildStatCard('Total Peserta Aktif', '$_totalStudents', '$_totalStudents Siswa', Icons.groups, Colors.blue),
         const SizedBox(width: 20),
-        _buildStatCard('Program Aktif', '6', 'Fokus Olimpiade & UTBK', Icons.auto_graph, Colors.orange),
+        _buildStatCard('Program Aktif', '$_totalPrograms', '$_totalPrograms Kelas', Icons.auto_graph, Colors.orange),
         const SizedBox(width: 20),
-        _buildStatCard('Rata-rata Kehadiran', '92%', 'Bulan Februari', Icons.check_circle_outline, Colors.green),
+        _buildStatCard('Rata-rata Nilai', '${_avgAttendance.toInt()}', 'Seluruh Program', Icons.check_circle_outline, Colors.green),
       ],
     );
   }
@@ -110,15 +148,19 @@ class _WakakurLaporanBimbelState extends State<WakakurLaporanBimbel> {
         columns: const [
           DataColumn(label: Text('Nama Pengajar')),
           DataColumn(label: Text('Mata Pelajaran')),
-          DataColumn(label: Text('Jadwal Sesi')),
-          DataColumn(label: Text('Status Kehadiran')),
+          DataColumn(label: Text('Total Sesi')),
+          DataColumn(label: Text('Progres Nilai')),
         ],
-        rows: [
-          _teacherRow('Drs. Heru Prasetyo', 'Fisika Olimpiade', '15:30 - 17:00', 'HADIR', Colors.green),
-          _teacherRow('Lina Marlina, S.Si', 'Biologi Kedokteran', '15:30 - 17:00', 'HADIR', Colors.green),
-          _teacherRow('Ahmad Fauzi, S.Pd', 'Matematika UTBK', '15:30 - 17:00', 'IJIN (Diganti)', Colors.orange),
-          _teacherRow('Siti Aminah, M.Pd', 'B. Inggris TOEFL', '15:30 - 17:00', 'BELUM ABSEN', Colors.red),
-        ],
+        rows: _programSummaries.map((p) {
+          double score = p['avg_score'] ?? 0.0;
+          return _teacherRow(
+            p['teacher_name'], 
+            p['nama'], 
+            '${p['session_count']} Sesi', 
+            '${score.toInt()}', 
+            score > 80 ? Colors.green : Colors.orange
+          );
+        }).toList(),
       ),
     );
   }
@@ -139,19 +181,23 @@ class _WakakurLaporanBimbelState extends State<WakakurLaporanBimbel> {
   }
 
   Widget _buildStudentAttendanceProgress() {
-    return GridView.count(
-      crossAxisCount: 2,
-      crossAxisSpacing: 20,
-      mainAxisSpacing: 20,
+    if (_programSummaries.isEmpty) {
+      return const Center(child: Text('Belum ada program bimbel yang berjalan.', style: TextStyle(color: Colors.grey, fontSize: 12)));
+    }
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 20,
+        mainAxisSpacing: 20,
+        childAspectRatio: 2.5,
+      ),
+      itemCount: _programSummaries.length,
       shrinkWrap: true,
-      childAspectRatio: 2.5,
       physics: const NeverScrollableScrollPhysics(),
-      children: [
-        _studentProgessCard('Kelas Intensif UTBK - Saintek', 45, 42),
-        _studentProgessCard('Kelas Intensif UTBK - Soshum', 38, 35),
-        _studentProgessCard('Olimpiade Matematika', 12, 12),
-        _studentProgessCard('Olimpiade Fisika', 15, 13),
-      ],
+      itemBuilder: (context, index) {
+        final p = _programSummaries[index];
+        return _studentProgessCard(p['nama'], p['student_count'], (p['student_count'] * 0.85).toInt()); // Mock attendance for now
+      },
     );
   }
 

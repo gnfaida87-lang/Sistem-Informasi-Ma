@@ -1,9 +1,15 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/constants/app_settings.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/router/app_router.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/providers/auth_provider.dart';
+import 'package:flutter/foundation.dart';
+import '../../../core/providers/system_provider.dart';
+import 'package:flutter/foundation.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -19,7 +25,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
 
   Future<void> _handleLogin() async {
-    print("DEBUG UI: Tombol Masuk diklik!");
+    debugPrint("DEBUG UI: Tombol Masuk diklik!");
     final identifier = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -37,7 +43,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
       // Navigasi berdasarkan role dari AppUser
       final role = authState.user!.roleCode ?? '';
-      context.go(AppRoutes.dashboardForRole(role));
+      final isWaliKelas = authState.user!.isWaliKelas;
+      context.go(AppRoutes.dashboardForRole(role, isWaliKelas: isWaliKelas));
     } else if (authState.errorMessage != null) {
       _showError(authState.errorMessage!);
     }
@@ -96,164 +103,247 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final sizes = _getResponsiveSizes(context);
     final authState = ref.watch(authProvider);
+    final settingsAsync = ref.watch(systemSettingsProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FE),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(
-              horizontal: sizes.isMobile ? 0 : 24,
-              vertical: sizes.isMobile ? 0 : 40,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: sizes.cardMaxWidth,
-              ),
+      backgroundColor: Colors.white,
+      body: Row(
+        children: [
+          // SISI KIRI: DEKORATIF (Hanya tampil di Tablet/Desktop)
+          if (!sizes.isMobile)
+            Expanded(
+              flex: 3,
               child: Container(
-                width: double.infinity,
-                margin: sizes.cardMargin,
-                padding: sizes.cardPadding,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(sizes.borderRadius),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
-                      blurRadius: sizes.isMobile ? 10 : 20,
-                      offset: Offset(0, sizes.isMobile ? 5 : 10),
-                    )
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    // Elemen Kapsul Dekoratif (Meniru gambar)
+                    _buildFloatingShape(top: 100, left: 50, width: 200, height: 60, rotation: -0.5),
+                    _buildFloatingShape(top: 250, left: 150, width: 300, height: 80, rotation: -0.5),
+                    _buildFloatingShape(bottom: 100, right: 100, width: 250, height: 70, rotation: -0.5),
+                    _buildFloatingShape(top: 400, left: 100, width: 150, height: 50, rotation: -0.5),
+                    
+                    Center(
+                      child: settingsAsync.when(
+                        data: (s) => Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (s.logoUrl != null)
+                              Container(
+                                width: 120,
+                                height: 120,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                  image: DecorationImage(image: NetworkImage(s.logoUrl!), fit: BoxFit.contain),
+                                ),
+                              ),
+                            const SizedBox(height: 24),
+                            Text(
+                              s.schoolName,
+                              style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        loading: () => const CircularProgressIndicator(color: Colors.white),
+                        error: (_, __) => const Icon(Icons.school, size: 80, color: Colors.white),
+                      ),
+                    ),
                   ],
                 ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildLogo(sizes),
-                      SizedBox(height: sizes.spacing),
-                      _buildWelcomeText(sizes),
-                      SizedBox(height: sizes.extraLargeSpacing),
-                      _buildUsernameInput(sizes),
-                      SizedBox(height: sizes.spacing),
-                      _buildPasswordInput(sizes),
-                      SizedBox(height: sizes.largeSpacing),
-                      _buildLoginButton(sizes, authState.isLoading),
-                    ],
+              ),
+            ),
+
+          // SISI KANAN: FORM LOGIN
+          Expanded(
+            flex: 2,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: sizes.isMobile ? 32 : 64),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (sizes.isMobile) ...[
+                          settingsAsync.when(
+                            data: (s) => _buildLogo(sizes, s.schoolName, s.logoUrl),
+                            loading: () => _buildLogo(sizes, 'SI Madrasah', null),
+                            error: (_, __) => _buildLogo(sizes, 'SI Madrasah', null),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                        const Text(
+                          'USER LOGIN',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF6A11CB),
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        settingsAsync.when(
+                          data: (s) => Text(
+                            s.appName,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                          ),
+                          loading: () => Text(
+                            'Selamat Datang di Informasi Akademik Sekolah',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                          ),
+                          error: (_, __) => Text(
+                            'Selamat Datang di Informasi Akademik Sekolah',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                          ),
+                        ),
+                        const SizedBox(height: 48),
+                        
+                        // Username Field (Pill-shaped)
+                        _buildModernInput(
+                          controller: _usernameController,
+                          hint: 'Username',
+                          icon: Icons.person_outline,
+                        ),
+                        const SizedBox(height: 20),
+                        
+                        // Password Field (Pill-shaped)
+                        _buildModernInput(
+                          controller: _passwordController,
+                          hint: 'Password',
+                          icon: Icons.lock_outline,
+                          isPassword: true,
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.check_circle, size: 18, color: const Color(0xFF6A11CB).withOpacity(0.7)),
+                                const SizedBox(width: 8),
+                                Text('Remember', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                              ],
+                            ),
+                            Text('Forgot password?', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 48),
+                        _buildModernLoginButton(sizes, authState.isLoading),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildLogo(_ResponsiveSizes sizes) {
-    return Center(
-      child: Container(
-        width: sizes.logoSize,
-        height: sizes.logoSize,
-        decoration: BoxDecoration(
-          color: Colors.blue.shade50,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.blue.shade100, width: 2),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.school_outlined, size: sizes.logoIconSize, color: Colors.blue.shade400),
-            Text(
-              appConfig.schoolName,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: sizes.logoTextSize,
-                color: Colors.blue.shade400,
-                fontWeight: FontWeight.bold,
-              ),
+  Widget _buildFloatingShape({double? top, double? left, double? right, double? bottom, required double width, required double height, required double rotation}) {
+    return Positioned(
+      top: top,
+      left: left,
+      right: right,
+      bottom: bottom,
+      child: Transform.rotate(
+        angle: rotation,
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(height / 2),
+            gradient: LinearGradient(
+              colors: [Colors.white.withOpacity(0.2), Colors.white.withOpacity(0.05)],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildWelcomeText(_ResponsiveSizes sizes) {
-    return Column(
-      children: [
-        Text(
-          'Selamat Datang di Informasi Akademik Sekolah',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: sizes.titleFontSize,
-            fontWeight: FontWeight.bold,
-            color: const Color(0xFF2B3674),
-          ),
+  Widget _buildModernInput({required TextEditingController controller, required String hint, required IconData icon, bool isPassword = false}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF6A11CB).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: isPassword && _isObscure,
+        onSubmitted: (_) => _handleLogin(),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: const Color(0xFF6A11CB).withOpacity(0.4)),
+          prefixIcon: Icon(icon, color: const Color(0xFF6A11CB).withOpacity(0.6)),
+          suffixIcon: isPassword ? IconButton(
+            icon: Icon(_isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey),
+            onPressed: () => setState(() => _isObscure = !_isObscure),
+          ) : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         ),
-        Text(
-          'Silakan masuk menggunakan akun Anda',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: sizes.subtitleFontSize,
-            color: Colors.grey.shade500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUsernameInput(_ResponsiveSizes sizes) {
-    return TextField(
-      controller: _usernameController,
-      decoration: InputDecoration(
-        hintText: 'Username',
-        prefixIcon: const Icon(Icons.person_outline),
-        filled: true,
-        fillColor: Colors.grey.shade50,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(sizes.inputBorderRadius)),
       ),
     );
   }
 
-  Widget _buildPasswordInput(_ResponsiveSizes sizes) {
-    return TextField(
-      controller: _passwordController,
-      obscureText: _isObscure,
-      decoration: InputDecoration(
-        hintText: 'Password',
-        prefixIcon: const Icon(Icons.lock_outline),
-        suffixIcon: IconButton(
-          icon: Icon(_isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-          onPressed: () => setState(() => _isObscure = !_isObscure),
+  Widget _buildModernLoginButton(_ResponsiveSizes sizes, bool isLoading) {
+    return Container(
+      width: 180,
+      height: 50,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(25),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFB830D1), Color(0xFF6A11CB)],
         ),
-        filled: true,
-        fillColor: Colors.grey.shade50,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(sizes.inputBorderRadius)),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF6A11CB).withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 6)),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(25),
+          onTap: isLoading ? null : _handleLogin,
+          child: Center(
+            child: isLoading
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Text(
+                    'LOGIN',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                  ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildLoginButton(_ResponsiveSizes sizes, bool isLoading) {
-    return Column(
-      children: [
-        if (isLoading) const CircularProgressIndicator(),
-        const SizedBox(height: 10),
-        MaterialButton(
-          minWidth: double.infinity,
-          height: 50,
-          color: Colors.blue,
-          onPressed: () {
-            print("!!! TOMBOL MASUK DITEKAN !!!");
-            _handleLogin();
-          },
-          child: const Text(
-            "MASUK",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
+  Widget _buildLogo(_ResponsiveSizes sizes, String schoolName, String? logoUrl) {
+    return Container(
+      width: 80,
+      height: 80,
+      decoration: BoxDecoration(
+        color: const Color(0xFF6A11CB).withOpacity(0.1),
+        shape: BoxShape.circle,
+        image: logoUrl != null ? DecorationImage(image: NetworkImage(logoUrl), fit: BoxFit.contain) : null,
+      ),
+      child: logoUrl == null ? const Icon(Icons.school, color: Color(0xFF6A11CB), size: 40) : null,
     );
   }
 }

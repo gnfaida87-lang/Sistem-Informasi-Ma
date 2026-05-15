@@ -1,5 +1,7 @@
-import '../../../core/network/d1_service.dart';
+﻿import '../../../core/network/d1_service.dart';
+import 'package:flutter/foundation.dart';
 import '../models/master_models.dart';
+import 'package:flutter/foundation.dart';
 
 class MasterService {
   final _d1Service = D1Service();
@@ -11,17 +13,14 @@ class MasterService {
   Future<List<Student>> fetchAllStudents() async {
     try {
       const sql = """
-        SELECT s.id, s.nis, s.name, s.class_id, s.is_active, s.status,
-               p.name as parent_name, p.phone as parent_phone
+        SELECT s.id, s.nis, s.nama, s.kelas_id, s.status, s.is_active
         FROM students s
-        LEFT JOIN student_parents sp ON s.id = sp.student_id
-        LEFT JOIN parents p ON sp.parent_id = p.id
-        ORDER BY s.name
+        ORDER BY s.nama
       """;
       final results = await _d1Service.query(sql);
       return results.map((e) => Student.fromJson(e)).toList();
     } catch (e) {
-      print("Error fetchAllStudents: $e");
+      debugPrint("Error fetchAllStudents: $e");
       return [];
     }
   }
@@ -31,13 +30,37 @@ class MasterService {
       final id = student.id.isEmpty
           ? 'stu_${DateTime.now().millisecondsSinceEpoch}'
           : student.id;
-      const sql = """
-        INSERT INTO students (id, nis, name, class_id, is_active, status)
-        VALUES (?, ?, ?, ?, 1, 'active')
+      
+      // 1. Simpan ke tabel students
+      const sqlStudent = """
+        INSERT INTO students (id, nis, nama, kelas_id, status, is_active, nama_wali, no_hp)
+        VALUES (?, ?, ?, ?, 'active', 1, ?, ?)
       """;
-      await _d1Service.query(sql, params: [id, student.nis, student.name, student.classId]);
+      await _d1Service.query(sqlStudent, params: [
+        id, 
+        student.nis, 
+        student.name, 
+        student.classId,
+        student.parentName,
+        student.phone
+      ]);
+
+      // 2. Buat otomatis akun Orang Tua
+      // Username menggunakan NISN siswa
+      const sqlUser = """
+        INSERT INTO users (id, username, password, role, ref_id, is_active)
+        VALUES (?, ?, ?, 'parent', ?, 1)
+      """;
+      
+      await _d1Service.query(sqlUser, params: [
+        'usr_${DateTime.now().millisecondsSinceEpoch + 1}',
+        student.nis,
+        'madrasah123', // Password default
+        id // Hubungkan ke ID siswa (sebagai wali dari siswa ini)
+      ]);
+
     } catch (e) {
-      print("Error addStudent: $e");
+      debugPrint("Error addStudent: $e");
       rethrow;
     }
   }
@@ -45,11 +68,20 @@ class MasterService {
   Future<void> updateStudent(Student student) async {
     try {
       const sql = """
-        UPDATE students SET nis = ?, name = ?, class_id = ? WHERE id = ?
+        UPDATE students 
+        SET nis = ?, nama = ?, kelas_id = ?, nama_wali = ?, no_hp = ? 
+        WHERE id = ?
       """;
-      await _d1Service.query(sql, params: [student.nis, student.name, student.classId, student.id]);
+      await _d1Service.query(sql, params: [
+        student.nis, 
+        student.name, 
+        student.classId, 
+        student.parentName,
+        student.phone,
+        student.id
+      ]);
     } catch (e) {
-      print("Error updateStudent: $e");
+      debugPrint("Error updateStudent: $e");
       rethrow;
     }
   }
@@ -58,7 +90,7 @@ class MasterService {
     try {
       await _d1Service.query("UPDATE students SET is_active = 0 WHERE id = ?", params: [id]);
     } catch (e) {
-      print("Error deleteStudent: $e");
+      debugPrint("Error deleteStudent: $e");
       rethrow;
     }
   }
@@ -66,9 +98,9 @@ class MasterService {
   Future<List<Student>> searchStudents(String query) async {
     try {
       const sql = """
-        SELECT s.id, s.nis, s.name, s.class_id, s.is_active, s.status
+        SELECT s.id, s.nis, s.nama, s.kelas_id, s.status, s.is_active
         FROM students s
-        WHERE s.name LIKE ? OR s.nis LIKE ?
+        WHERE s.nama LIKE ? OR s.nis LIKE ?
         LIMIT 20
       """;
       final results = await _d1Service.query(sql, params: ["%$query%", "%$query%"]);
@@ -84,11 +116,11 @@ class MasterService {
 
   Future<List<Teacher>> fetchAllTeachers() async {
     try {
-      const sql = "SELECT id, nip, name as nama, is_wali_kelas, is_active FROM teachers ORDER BY name";
+      const sql = "SELECT id, nip, nama, is_wali_kelas, is_active FROM teachers ORDER BY nama";
       final results = await _d1Service.query(sql);
       return results.map((e) => Teacher.fromJson(e)).toList();
     } catch (e) {
-      print("Error fetchAllTeachers: $e");
+      debugPrint("Error fetchAllTeachers: $e");
       return [];
     }
   }
@@ -98,13 +130,34 @@ class MasterService {
       final id = teacher.id.isEmpty
           ? 'tch_${DateTime.now().millisecondsSinceEpoch}'
           : teacher.id;
-      const sql = """
-        INSERT INTO teachers (id, nip, name, is_wali_kelas, is_active)
+      
+      // 1. Simpan data guru ke tabel teachers
+      const sqlTeacher = """
+        INSERT INTO teachers (id, nip, nama, is_wali_kelas, is_active)
         VALUES (?, ?, ?, ?, 1)
       """;
-      await _d1Service.query(sql, params: [id, teacher.nip, teacher.name, teacher.isWaliKelas ? 1 : 0]);
+      await _d1Service.query(sqlTeacher, params: [id, teacher.nip, teacher.name, teacher.isWaliKelas ? 1 : 0]);
+
+      // 2. Buat otomatis akun user login
+      // Username menggunakan NIP jika ada, jika tidak gunakan nama tanpa spasi
+      final username = (teacher.nip != null && teacher.nip!.isNotEmpty) 
+          ? teacher.nip 
+          : teacher.name.replaceAll(' ', '').toLowerCase();
+      
+      const sqlUser = """
+        INSERT INTO users (id, username, password, role, ref_id, is_active)
+        VALUES (?, ?, ?, 'teacher', ?, 1)
+      """;
+      
+      await _d1Service.query(sqlUser, params: [
+        'usr_${DateTime.now().millisecondsSinceEpoch}',
+        username,
+        'madrasah123', // Password default
+        id // Menghubungkan user ke ID guru
+      ]);
+      
     } catch (e) {
-      print("Error addTeacher: $e");
+      debugPrint("Error addTeacher with Account Creation: $e");
       rethrow;
     }
   }
@@ -112,11 +165,11 @@ class MasterService {
   Future<void> updateTeacher(Teacher teacher) async {
     try {
       const sql = """
-        UPDATE teachers SET nip = ?, name = ?, is_wali_kelas = ? WHERE id = ?
+        UPDATE teachers SET nip = ?, nama = ?, is_wali_kelas = ? WHERE id = ?
       """;
       await _d1Service.query(sql, params: [teacher.nip, teacher.name, teacher.isWaliKelas ? 1 : 0, teacher.id]);
     } catch (e) {
-      print("Error updateTeacher: $e");
+      debugPrint("Error updateTeacher: $e");
       rethrow;
     }
   }
@@ -126,7 +179,7 @@ class MasterService {
       // Soft delete agar data historis terjaga
       await _d1Service.query("UPDATE teachers SET is_active = 0 WHERE id = ?", params: [id]);
     } catch (e) {
-      print("Error deleteTeacher: $e");
+      debugPrint("Error deleteTeacher: $e");
       rethrow;
     }
   }
@@ -137,11 +190,22 @@ class MasterService {
 
   Future<List<ClassRoom>> fetchAllClasses() async {
     try {
-      const sql = "SELECT id, name as nama, teacher_id as wali_kelas_id FROM classes ORDER BY name";
+      const sql = """
+        SELECT 
+          c.id, 
+          c.nama, 
+          c.wali_kelas_id,
+          t.nama as wali_kelas_nama,
+          (SELECT COUNT(*) FROM students s WHERE s.kelas_id = c.id AND s.is_active = 1) as jumlah_siswa,
+          c.kapasitas
+        FROM classes c
+        LEFT JOIN teachers t ON c.wali_kelas_id = t.id
+        ORDER BY c.nama
+      """;
       final results = await _d1Service.query(sql);
       return results.map((e) => ClassRoom.fromJson(e)).toList();
     } catch (e) {
-      print("Error fetchAllClasses: $e");
+      debugPrint("Error fetchAllClasses: $e");
       return [];
     }
   }
@@ -151,20 +215,20 @@ class MasterService {
       final id = kelas.id.isEmpty
           ? 'cls_${DateTime.now().millisecondsSinceEpoch}'
           : kelas.id;
-      const sql = "INSERT INTO classes (id, name, teacher_id) VALUES (?, ?, ?)";
+      const sql = "INSERT INTO classes (id, nama, wali_kelas_id) VALUES (?, ?, ?)";
       await _d1Service.query(sql, params: [id, kelas.name, kelas.waliKelasId]);
     } catch (e) {
-      print("Error addClass: $e");
+      debugPrint("Error addClass: $e");
       rethrow;
     }
   }
 
   Future<void> updateClass(ClassRoom kelas) async {
     try {
-      const sql = "UPDATE classes SET name = ?, teacher_id = ? WHERE id = ?";
+      const sql = "UPDATE classes SET nama = ?, wali_kelas_id = ? WHERE id = ?";
       await _d1Service.query(sql, params: [kelas.name, kelas.waliKelasId, kelas.id]);
     } catch (e) {
-      print("Error updateClass: $e");
+      debugPrint("Error updateClass: $e");
       rethrow;
     }
   }
@@ -173,7 +237,7 @@ class MasterService {
     try {
       await _d1Service.query("DELETE FROM classes WHERE id = ?", params: [id]);
     } catch (e) {
-      print("Error deleteClass: $e");
+      debugPrint("Error deleteClass: $e");
       rethrow;
     }
   }
@@ -184,11 +248,11 @@ class MasterService {
 
   Future<List<Subject>> fetchAllSubjects() async {
     try {
-      const sql = "SELECT id, code as kode, name as nama, min_score as kkm FROM subjects ORDER BY name";
+      const sql = "SELECT id, kode, nama, kkm FROM subjects ORDER BY nama";
       final results = await _d1Service.query(sql);
       return results.map((e) => Subject.fromJson(e)).toList();
     } catch (e) {
-      print("Error fetchAllSubjects: $e");
+      debugPrint("Error fetchAllSubjects: $e");
       return [];
     }
   }
@@ -198,20 +262,20 @@ class MasterService {
       final id = subject.id.isEmpty
           ? 'subj_${DateTime.now().millisecondsSinceEpoch}'
           : subject.id;
-      const sql = "INSERT INTO subjects (id, code, name, min_score) VALUES (?, ?, ?, ?)";
+      const sql = "INSERT INTO subjects (id, kode, nama, kkm) VALUES (?, ?, ?, ?)";
       await _d1Service.query(sql, params: [id, subject.code, subject.name, subject.kkm]);
     } catch (e) {
-      print("Error addSubject: $e");
+      debugPrint("Error addSubject: $e");
       rethrow;
     }
   }
 
   Future<void> updateSubject(Subject subject) async {
     try {
-      const sql = "UPDATE subjects SET code = ?, name = ?, min_score = ? WHERE id = ?";
+      const sql = "UPDATE subjects SET kode = ?, nama = ?, kkm = ? WHERE id = ?";
       await _d1Service.query(sql, params: [subject.code, subject.name, subject.kkm, subject.id]);
     } catch (e) {
-      print("Error updateSubject: $e");
+      debugPrint("Error updateSubject: $e");
       rethrow;
     }
   }
@@ -220,7 +284,7 @@ class MasterService {
     try {
       await _d1Service.query("DELETE FROM subjects WHERE id = ?", params: [id]);
     } catch (e) {
-      print("Error deleteSubject: $e");
+      debugPrint("Error deleteSubject: $e");
       rethrow;
     }
   }
@@ -231,11 +295,11 @@ class MasterService {
 
   Future<List<Major>> fetchAllMajors() async {
     try {
-      const sql = "SELECT id, code as kode, name as nama FROM majors ORDER BY name";
+      const sql = "SELECT id, kode, nama FROM departments ORDER BY nama";
       final results = await _d1Service.query(sql);
       return results.map((e) => Major.fromJson(e)).toList();
     } catch (e) {
-      print("Error fetchAllMajors: $e");
+      debugPrint("Error fetchAllMajors: $e");
       return [];
     }
   }
@@ -243,29 +307,29 @@ class MasterService {
   Future<void> addMajor(Major major) async {
     try {
       final id = major.id.isEmpty ? 'mjr_${DateTime.now().millisecondsSinceEpoch}' : major.id;
-      const sql = "INSERT INTO majors (id, code, name) VALUES (?, ?, ?)";
+      const sql = "INSERT INTO departments (id, kode, nama) VALUES (?, ?, ?)";
       await _d1Service.query(sql, params: [id, major.code, major.name]);
     } catch (e) {
-      print("Error addMajor: $e");
+      debugPrint("Error addMajor: $e");
       rethrow;
     }
   }
 
   Future<void> updateMajor(Major major) async {
     try {
-      const sql = "UPDATE majors SET code = ?, name = ? WHERE id = ?";
+      const sql = "UPDATE departments SET kode = ?, nama = ? WHERE id = ?";
       await _d1Service.query(sql, params: [major.code, major.name, major.id]);
     } catch (e) {
-      print("Error updateMajor: $e");
+      debugPrint("Error updateMajor: $e");
       rethrow;
     }
   }
 
   Future<void> deleteMajor(String id) async {
     try {
-      await _d1Service.query("DELETE FROM majors WHERE id = ?", params: [id]);
+      await _d1Service.query("DELETE FROM departments WHERE id = ?", params: [id]);
     } catch (e) {
-      print("Error deleteMajor: $e");
+      debugPrint("Error deleteMajor: $e");
       rethrow;
     }
   }
@@ -276,11 +340,11 @@ class MasterService {
 
   Future<List<AcademicYear>> fetchAllAcademicYears() async {
     try {
-      const sql = "SELECT id, year_name as tahun, is_active FROM academic_years ORDER BY year_name DESC";
+      const sql = "SELECT id, tahun, is_active FROM academic_years ORDER BY tahun DESC";
       final results = await _d1Service.query(sql);
       return results.map((e) => AcademicYear.fromJson(e)).toList();
     } catch (e) {
-      print("Error fetchAllAcademicYears: $e");
+      debugPrint("Error fetchAllAcademicYears: $e");
       return [];
     }
   }
@@ -288,20 +352,32 @@ class MasterService {
   Future<void> addAcademicYear(AcademicYear year) async {
     try {
       final id = year.id.isEmpty ? 'ay_${DateTime.now().millisecondsSinceEpoch}' : year.id;
-      const sql = "INSERT INTO academic_years (id, year_name, is_active) VALUES (?, ?, ?)";
+      const sql = "INSERT INTO academic_years (id, tahun, is_active) VALUES (?, ?, ?)";
       await _d1Service.query(sql, params: [id, year.year, year.isActive ? 1 : 0]);
     } catch (e) {
-      print("Error addAcademicYear: $e");
+      debugPrint("Error addAcademicYear: $e");
       rethrow;
     }
   }
 
   Future<void> updateAcademicYear(AcademicYear year) async {
     try {
-      const sql = "UPDATE academic_years SET year_name = ?, is_active = ? WHERE id = ?";
+      const sql = "UPDATE academic_years SET tahun = ?, is_active = ? WHERE id = ?";
       await _d1Service.query(sql, params: [year.year, year.isActive ? 1 : 0, year.id]);
     } catch (e) {
-      print("Error updateAcademicYear: $e");
+      debugPrint("Error updateAcademicYear: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> setActiveAcademicYear(String id) async {
+    try {
+      // Nonaktifkan semua tahun ajaran terlebih dahulu
+      await _d1Service.query("UPDATE academic_years SET is_active = 0");
+      // Aktifkan hanya tahun ajaran yang dipilih
+      await _d1Service.query("UPDATE academic_years SET is_active = 1 WHERE id = ?", params: [id]);
+    } catch (e) {
+      debugPrint("Error setActiveAcademicYear: $e");
       rethrow;
     }
   }
@@ -310,14 +386,14 @@ class MasterService {
     try {
       await _d1Service.query("DELETE FROM academic_years WHERE id = ?", params: [id]);
     } catch (e) {
-      print("Error deleteAcademicYear: $e");
+      debugPrint("Error deleteAcademicYear: $e");
       rethrow;
     }
   }
 
   Future<AcademicYear?> fetchActiveAcademicYear() async {
     try {
-      const sql = "SELECT id, year_name as tahun, is_active FROM academic_years WHERE is_active = 1 LIMIT 1";
+      const sql = "SELECT id, tahun, is_active FROM academic_years WHERE is_active = 1 LIMIT 1";
       final results = await _d1Service.query(sql);
       return results.isNotEmpty ? AcademicYear.fromJson(results.first) : null;
     } catch (e) {
@@ -331,11 +407,11 @@ class MasterService {
 
   Future<List<Extracurricular>> fetchAllEkskul() async {
     try {
-      const sql = "SELECT id, name as nama, coach as pembina FROM extracurriculars ORDER BY name";
+      const sql = "SELECT id, nama, pembina FROM ekskul ORDER BY nama";
       final results = await _d1Service.query(sql);
       return results.map((e) => Extracurricular.fromJson(e)).toList();
     } catch (e) {
-      print("Error fetchAllEkskul: $e");
+      debugPrint("Error fetchAllEkskul: $e");
       return [];
     }
   }
@@ -343,29 +419,29 @@ class MasterService {
   Future<void> addEkskul(Extracurricular ekskul) async {
     try {
       final id = ekskul.id.isEmpty ? 'ex_${DateTime.now().millisecondsSinceEpoch}' : ekskul.id;
-      const sql = "INSERT INTO extracurriculars (id, name, coach) VALUES (?, ?, ?)";
+      const sql = "INSERT INTO ekskul (id, nama, pembina) VALUES (?, ?, ?)";
       await _d1Service.query(sql, params: [id, ekskul.name, ekskul.coach]);
     } catch (e) {
-      print("Error addEkskul: $e");
+      debugPrint("Error addEkskul: $e");
       rethrow;
     }
   }
 
   Future<void> updateEkskul(Extracurricular ekskul) async {
     try {
-      const sql = "UPDATE extracurriculars SET name = ?, coach = ? WHERE id = ?";
+      const sql = "UPDATE ekskul SET nama = ?, pembina = ? WHERE id = ?";
       await _d1Service.query(sql, params: [ekskul.name, ekskul.coach, ekskul.id]);
     } catch (e) {
-      print("Error updateEkskul: $e");
+      debugPrint("Error updateEkskul: $e");
       rethrow;
     }
   }
 
   Future<void> deleteEkskul(String id) async {
     try {
-      await _d1Service.query("DELETE FROM extracurriculars WHERE id = ?", params: [id]);
+      await _d1Service.query("DELETE FROM ekskul WHERE id = ?", params: [id]);
     } catch (e) {
-      print("Error deleteEkskul: $e");
+      debugPrint("Error deleteEkskul: $e");
       rethrow;
     }
   }
@@ -373,12 +449,12 @@ class MasterService {
   Future<List<EkskulParticipant>> fetchEkskulParticipants(String ekskulId) async {
     try {
       const sql = """
-        SELECT ep.id, ep.extracurricular_id as ekskul_id, ep.student_id as siswa_id,
-               s.name as siswa_nama, s.nis as siswa_nis
-        FROM extracurricular_participants ep
-        JOIN students s ON ep.student_id = s.id
-        WHERE ep.extracurricular_id = ?
-        ORDER BY s.name
+        SELECT ep.id, ep.ekskul_id, ep.siswa_id,
+               s.nama as siswa_nama, s.nis as siswa_nis
+        FROM ekskul_participants ep
+        JOIN students s ON ep.siswa_id = s.id
+        WHERE ep.ekskul_id = ?
+        ORDER BY s.nama
       """;
       final results = await _d1Service.query(sql, params: [ekskulId]);
       return results.map((e) => EkskulParticipant.fromJson({
@@ -386,8 +462,31 @@ class MasterService {
         'siswa': {'id': e['siswa_id'], 'nama': e['siswa_nama'], 'nis': e['siswa_nis']},
       })).toList();
     } catch (e) {
-      print("Error fetchEkskulParticipants: $e");
+      debugPrint("Error fetchEkskulParticipants: $e");
       return [];
+    }
+  }
+
+  Future<void> addEkskulParticipant(String ekskulId, String studentId) async {
+    try {
+      const sql = "INSERT INTO ekskul_participants (id, ekskul_id, siswa_id) VALUES (?, ?, ?)";
+      await _d1Service.query(sql, params: [
+        'ep_${DateTime.now().millisecondsSinceEpoch}',
+        ekskulId,
+        studentId
+      ]);
+    } catch (e) {
+      debugPrint("Error addEkskulParticipant: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> removeEkskulParticipant(String participantId) async {
+    try {
+      await _d1Service.query("DELETE FROM ekskul_participants WHERE id = ?", params: [participantId]);
+    } catch (e) {
+      debugPrint("Error removeEkskulParticipant: $e");
+      rethrow;
     }
   }
 
@@ -397,11 +496,11 @@ class MasterService {
 
   Future<List<Tutoring>> fetchAllBimbel() async {
     try {
-      const sql = "SELECT id, name as nama, teacher_id as guru_id FROM tutoring_programs ORDER BY name";
+      const sql = "SELECT id, nama, guru_id FROM bimbel_programs ORDER BY nama";
       final results = await _d1Service.query(sql);
       return results.map((e) => Tutoring.fromJson(e)).toList();
     } catch (e) {
-      print("Error fetchAllBimbel: $e");
+      debugPrint("Error fetchAllBimbel: $e");
       return [];
     }
   }
@@ -409,50 +508,50 @@ class MasterService {
   Future<void> addBimbel(Tutoring bimbel) async {
     try {
       final id = bimbel.id.isEmpty ? 'tut_${DateTime.now().millisecondsSinceEpoch}' : bimbel.id;
-      const sql = "INSERT INTO tutoring_programs (id, name, teacher_id) VALUES (?, ?, ?)";
+      const sql = "INSERT INTO bimbel_programs (id, nama, guru_id) VALUES (?, ?, ?)";
       await _d1Service.query(sql, params: [id, bimbel.name, bimbel.teacherId]);
     } catch (e) {
-      print("Error addBimbel: $e");
+      debugPrint("Error addBimbel: $e");
       rethrow;
     }
   }
 
   Future<void> updateBimbel(Tutoring bimbel) async {
     try {
-      const sql = "UPDATE tutoring_programs SET name = ?, teacher_id = ? WHERE id = ?";
+      const sql = "UPDATE bimbel_programs SET nama = ?, guru_id = ? WHERE id = ?";
       await _d1Service.query(sql, params: [bimbel.name, bimbel.teacherId, bimbel.id]);
     } catch (e) {
-      print("Error updateBimbel: $e");
+      debugPrint("Error updateBimbel: $e");
       rethrow;
     }
   }
 
   Future<void> deleteBimbel(String id) async {
     try {
-      await _d1Service.query("DELETE FROM tutoring_programs WHERE id = ?", params: [id]);
+      await _d1Service.query("DELETE FROM bimbel_programs WHERE id = ?", params: [id]);
     } catch (e) {
-      print("Error deleteBimbel: $e");
+      debugPrint("Error deleteBimbel: $e");
       rethrow;
     }
   }
 
   Future<void> addBimbelParticipant(String bimbelId, String studentId) async {
     try {
-      const sql = "INSERT INTO tutoring_participants (id, program_id, student_id) VALUES (?, ?, ?)";
+      const sql = "INSERT INTO bimbel_participants (id, program_id, siswa_id) VALUES (?, ?, ?)";
       final id = 'tp_${DateTime.now().millisecondsSinceEpoch}';
       await _d1Service.query(sql, params: [id, bimbelId, studentId]);
     } catch (e) {
-      print("Error addBimbelParticipant: $e");
+      debugPrint("Error addBimbelParticipant: $e");
       rethrow;
     }
   }
 
   Future<void> removeBimbelParticipant(String participantId) async {
     try {
-      const sql = "DELETE FROM tutoring_participants WHERE id = ?";
+      const sql = "DELETE FROM bimbel_participants WHERE id = ?";
       await _d1Service.query(sql, params: [participantId]);
     } catch (e) {
-      print("Error removeBimbelParticipant: $e");
+      debugPrint("Error removeBimbelParticipant: $e");
       rethrow;
     }
   }
@@ -460,12 +559,12 @@ class MasterService {
   Future<List<BimbelParticipant>> fetchBimbelParticipants(String bimbelId) async {
     try {
       const sql = """
-        SELECT bp.id, bp.program_id, bp.student_id as siswa_id,
-               s.name as siswa_nama, s.nis as siswa_nis
-        FROM tutoring_participants bp
-        JOIN students s ON bp.student_id = s.id
+        SELECT bp.id, bp.program_id, bp.siswa_id,
+               s.nama as siswa_nama, s.nis as siswa_nis
+        FROM bimbel_participants bp
+        JOIN students s ON bp.siswa_id = s.id
         WHERE bp.program_id = ?
-        ORDER BY s.name
+        ORDER BY s.nama
       """;
       final results = await _d1Service.query(sql, params: [bimbelId]);
       return results.map((e) => BimbelParticipant.fromJson({
@@ -474,7 +573,7 @@ class MasterService {
         'siswa': {'id': e['siswa_id'], 'nama': e['siswa_nama'], 'nis': e['siswa_nis']},
       })).toList();
     } catch (e) {
-      print("Error fetchBimbelParticipants: $e");
+      debugPrint("Error fetchBimbelParticipants: $e");
       return [];
     }
   }

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../core/network/d1_service.dart';
+import '../../../core/utils/context_extensions.dart';
+import '../../../core/utils/exam_schedule_pdf_helper.dart';
 
 class WakakurJadwalUjian extends StatefulWidget {
   const WakakurJadwalUjian({super.key});
@@ -8,6 +11,8 @@ class WakakurJadwalUjian extends StatefulWidget {
 }
 
 class _WakakurJadwalUjianState extends State<WakakurJadwalUjian> {
+  final _d1Service = D1Service();
+  bool _isSaving = false;
   String _selectedExamType = 'PAS (Penilaian Akhir Semester)';
   final TextEditingController _examNameController = TextEditingController(text: 'Penilaian Akhir Semester 2025');
   String _selectedDate = 'Hari Ke-1';
@@ -26,16 +31,173 @@ class _WakakurJadwalUjianState extends State<WakakurJadwalUjian> {
     {'sesi': 'Sesi 3', 'waktu': '13:00 - 15:00'},
   ];
 
-  final List<Map<String, String>> _examSubjects = [
-    {'mapel': 'Matematika (Wajib)', 'pengawas': 'Agus Prayitno, M.Pd'},
-    {'mapel': 'Bahasa Indonesia', 'pengawas': 'Siti Rahmawati, S.Pd'},
-    {'mapel': 'Fisika / Ekonomi', 'pengawas': 'Drs. Budi Santoso'},
-    {'mapel': 'Biologi / Geografi', 'pengawas': 'Nisa Nabila, S.Si'},
-    {'mapel': 'Pendidikan Agama', 'pengawas': 'Ahmad Fauzi, S.Pd'},
-    {'mapel': 'Bahasa Inggris', 'pengawas': 'Rina Fitriani, M.Pd'},
-  ];
+  final List<Map<String, String>> _examSubjects = [];
 
   final Map<String, Map<String, String>> _examSchedule = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _initData();
+  }
+
+  Future<void> _initData() async {
+    await _ensureTableExists();
+    await _fetchInventory();
+    await _fetchExistingSchedules();
+  }
+
+  Future<void> _ensureTableExists() async {
+    try {
+      const sql = """
+        CREATE TABLE IF NOT EXISTS exam_schedules (
+          id TEXT PRIMARY KEY,
+          exam_type TEXT,
+          exam_name TEXT,
+          semester TEXT,
+          class_level TEXT,
+          date_label TEXT,
+          session_name TEXT,
+          time_range TEXT,
+          room_name TEXT,
+          subject_name TEXT,
+          supervisor_name TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      """;
+      await _d1Service.query(sql);
+    } catch (e) {
+      debugPrint("Error ensureTableExists: $e");
+    }
+  }
+
+  Future<void> _fetchInventory() async {
+    try {
+      final gurus = await _d1Service.query("SELECT nama FROM teachers WHERE is_active = 1 ORDER BY nama");
+      final mapels = await _d1Service.query("SELECT nama FROM subjects ORDER BY nama");
+      
+      setState(() {
+        _examSubjects.clear();
+        for (var m in (mapels as List)) {
+          // We don't want cross join here, just show available subjects.
+          // For now, let's just use the first teacher as default or let user choose?
+          // Actually, the UI expects a Map<String, String> with 'mapel' and 'pengawas'.
+          // I'll just map subjects and pick a default pengawas if available.
+          String defaultPengawas = gurus.isNotEmpty ? gurus[0]['nama'].toString() : '-';
+          _examSubjects.add({
+            'mapel': m['nama'].toString(),
+            'pengawas': defaultPengawas,
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint("Error fetch inventory: $e");
+    }
+  }
+
+  Future<void> _fetchExistingSchedules() async {
+    try {
+      final results = await _d1Service.query(
+        "SELECT * FROM exam_schedules WHERE exam_type = ? AND semester = ? AND class_level = ?",
+        params: [_selectedExamType, _selectedSemester, _selectedClassLevel],
+      );
+
+      setState(() {
+        _examSchedule.clear();
+        for (var row in results) {
+          // Find session index
+          int sessionIdx = _sessions.indexWhere((s) => s['sesi'] == row['session_name']);
+          if (sessionIdx == -1) {
+            // Add session if not exists
+            _sessions.add({'sesi': row['session_name'], 'waktu': row['time_range']});
+            sessionIdx = _sessions.length - 1;
+          }
+
+          // Add date if not exists
+          if (!_dates.contains(row['date_label'])) {
+            _dates.add(row['date_label']);
+          }
+
+          // Add room if not exists
+          if (!_rooms.contains(row['room_name'])) {
+            _rooms.add(row['room_name']);
+          }
+
+          String key = '${row['date_label']}_${sessionIdx}_${row['room_name']}';
+          _examSchedule[key] = {
+            'mapel': row['subject_name'],
+            'pengawas': row['supervisor_name'],
+          };
+          
+          if (row['exam_name'] != null) {
+            _examNameController.text = row['exam_name'];
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint("Error fetchExistingSchedules: $e");
+    }
+  }
+
+  Future<void> _savePlotting() async {
+    if (_examSchedule.isEmpty) {
+      context.showErrorSnackBar('Jadwal masih kosong!');
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      // Hapus jadwal lama untuk ujian/semester/level ini (agar tidak duplikat)
+      await _d1Service.query(
+        "DELETE FROM exam_schedules WHERE exam_type = ? AND semester = ? AND class_level = ?",
+        params: [_selectedExamType, _selectedSemester, _selectedClassLevel],
+      );
+
+      // Simpan jadwal baru
+      for (var entry in _examSchedule.entries) {
+        final keyParts = entry.key.split('_'); // date_session_room
+        final dateLabel = keyParts[0];
+        final sessionIdx = int.parse(keyParts[1]);
+        final roomName = keyParts[2];
+        final session = _sessions[sessionIdx];
+
+        await _d1Service.query(
+          """
+          INSERT INTO exam_schedules 
+          (id, exam_type, exam_name, semester, class_level, date_label, session_name, time_range, room_name, subject_name, supervisor_name) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """,
+          params: [
+            "ex_${DateTime.now().millisecondsSinceEpoch}_${entry.key}",
+            _selectedExamType,
+            _examNameController.text,
+            _selectedSemester,
+            _selectedClassLevel,
+            dateLabel,
+            session['sesi'],
+            session['waktu'],
+            roomName,
+            entry.value['mapel'],
+            entry.value['pengawas'],
+          ],
+        );
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Jadwal Ujian BERHASIL DISIMPAN & SINKRON ke database!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      context.showErrorSnackBar('Gagal menyimpan: $e');
+    } finally {
+      setState(() => _isSaving = false);
+    }
+  }
 
   void _handleDrop(String room, int sessionIndex, Map<String, String> exam) {
     // Conflict check: Is this supervisor already in another room during this session?
@@ -119,7 +281,10 @@ class _WakakurJadwalUjianState extends State<WakakurJadwalUjian> {
                       underline: const SizedBox(),
                       items: ['PAS (Penilaian Akhir Semester)', 'PTS (Penilaian Tengah Semester)', 'Ujian Madrasah (UM)', 'Custom']
                           .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13)))).toList(),
-                      onChanged: (val) => setState(() => _selectedExamType = val!),
+                      onChanged: (val) {
+                        setState(() => _selectedExamType = val!);
+                        _fetchExistingSchedules();
+                      },
                     ),
                   ),
                 ],
@@ -168,7 +333,10 @@ class _WakakurJadwalUjianState extends State<WakakurJadwalUjian> {
                                 isExpanded: true,
                                 underline: const SizedBox(),
                                 items: ['Ganjil', 'Genap'].map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
-                                onChanged: (val) => setState(() => _selectedSemester = val!),
+                                onChanged: (val) {
+                                  setState(() => _selectedSemester = val!);
+                                  _fetchExistingSchedules();
+                                },
                               ),
                             ],
                           ),
@@ -184,7 +352,10 @@ class _WakakurJadwalUjianState extends State<WakakurJadwalUjian> {
                                 isExpanded: true,
                                 underline: const SizedBox(),
                                 items: ['X', 'XI', 'XII'].map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
-                                onChanged: (val) => setState(() => _selectedClassLevel = val!),
+                                onChanged: (val) {
+                                  setState(() => _selectedClassLevel = val!);
+                                  _fetchExistingSchedules();
+                                },
                               ),
                             ],
                           ),
@@ -246,16 +417,35 @@ class _WakakurJadwalUjianState extends State<WakakurJadwalUjian> {
                       const SizedBox(width: 12),
                       ElevatedButton.icon(
                         onPressed: () {
-                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Plotting Berhasil Disimpan & Disinkronkan ke Akun Guru & Ortu'),
-                              backgroundColor: Colors.teal,
-                              behavior: SnackBarBehavior.floating,
-                            ),
+                          if (_examSchedule.isEmpty) {
+                            context.showErrorSnackBar('Jadwal masih kosong, tidak ada yang bisa dicetak.');
+                            return;
+                          }
+                          ExamSchedulePdfHelper.generateAndPrint(
+                            examName: _examNameController.text,
+                            examType: _selectedExamType,
+                            semester: _selectedSemester,
+                            classLevel: _selectedClassLevel,
+                            dates: _dates,
+                            rooms: _rooms,
+                            sessions: _sessions,
+                            schedule: _examSchedule,
                           );
                         },
-                        icon: const Icon(Icons.save_outlined),
-                        label: const Text('Simpan Plotting'),
+                        icon: const Icon(Icons.picture_as_pdf),
+                        label: const Text('Cetak PDF'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade700,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: _isSaving ? null : _savePlotting,
+                        icon: _isSaving 
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.cloud_upload_outlined),
+                        label: Text(_isSaving ? 'Menyimpan...' : 'Simpan & Sinkronkan'),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade700, foregroundColor: Colors.white),
                       ),
                     ],

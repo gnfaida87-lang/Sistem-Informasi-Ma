@@ -8,6 +8,7 @@ class Student {
   final String? status; // 'active', 'alumni', 'mutasi'
   final bool isActive;
   final String? parentName;
+  final String? phone;
 
   Student({
     required this.id,
@@ -17,33 +18,30 @@ class Student {
     this.status,
     required this.isActive,
     this.parentName,
+    this.phone,
   });
 
   factory Student.fromJson(Map<String, dynamic> json) {
-    String? pName;
-    if (json['orang_tua_siswa'] != null && (json['orang_tua_siswa'] as List).isNotEmpty) {
-      final ot = json['orang_tua_siswa'][0]['orang_tua'];
-      if (ot != null) {
-        pName = ot['nama_ayah'] ?? ot['nama_ibu'] ?? ot['nama'];
-      }
-    }
-
     return Student(
-        id: json['id'],
-        nis: json['nis'] ?? '',
-        name: json['nama'] ?? json['name'] ?? '',
-        classId: json['kelas_id'] ?? json['class_id'],
-        status: json['status'],
-        isActive: json['status'] == 'active' || (json['is_active'] ?? true),
-        parentName: pName,
-      );
+      id: json['id'],
+      nis: json['nis'] ?? '',
+      name: json['nama'] ?? json['name'] ?? '',
+      classId: json['kelas_id'] ?? json['class_id'],
+      status: json['status'],
+      isActive: json['status'] == 'active' || (json['is_active'] ?? true),
+      parentName: json['nama_wali'] ?? json['parent_name'],
+      phone: json['no_hp'] ?? json['phone'],
+    );
   }
 
   Map<String, dynamic> toJson() => {
+        'id': id,
         'nis': nis,
         'nama': name,
         'kelas_id': classId,
         'status': isActive ? 'active' : 'inactive',
+        'nama_wali': parentName,
+        'no_hp': phone,
       };
 }
 
@@ -81,12 +79,16 @@ class ClassRoom {
   final String id;
   final String name;
   final String? waliKelasId;
+  final String? waliKelasNama;
+  final int jumlahSiswa;
   final int kapasitas;
 
   ClassRoom({
     required this.id,
     required this.name,
     this.waliKelasId,
+    this.waliKelasNama,
+    this.jumlahSiswa = 0,
     this.kapasitas = 35,
   });
 
@@ -94,6 +96,8 @@ class ClassRoom {
         id: json['id'],
         name: json['nama'] ?? json['name'] ?? '',
         waliKelasId: json['wali_kelas_id'],
+        waliKelasNama: json['wali_kelas_nama'],
+        jumlahSiswa: json['jumlah_siswa'] ?? 0,
         kapasitas: json['kapasitas'] ?? 35,
       );
 
