@@ -8,6 +8,7 @@ import 'monitoring_screen.dart';
 import 'backup_screen.dart';
 import 'integration_screen.dart';
 import 'app_settings_screen.dart';
+import 'db_diagnostic_screen.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../../../shared/widgets/shared_top_bar.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
@@ -30,6 +31,7 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
     const BackupMaintenanceScreen(),
     const IntegrationScreen(),
     const AppSettingsScreen(),
+    const DbDiagnosticScreen(),
   ];
 
   final List<Map<String, dynamic>> _menuItems = [
@@ -40,6 +42,7 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
     {'title': 'Backup Data', 'icon': Icons.cloud_outlined},
     {'title': 'Integrasi AI', 'icon': Icons.memory_outlined},
     {'title': 'Pengaturan', 'icon': Icons.settings_outlined},
+    {'title': 'Diagnostik DB', 'icon': Icons.analytics_outlined},
   ];
 
   @override

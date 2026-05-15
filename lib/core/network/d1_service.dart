@@ -1,10 +1,8 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/foundation.dart';
 import 'd1_config.dart';
-import 'package:flutter/foundation.dart';
 
 class D1Service {
   static final D1Service _instance = D1Service._internal();
@@ -91,7 +89,7 @@ class D1Service {
     }
   }
 
-  /// Mengunggah file ke Google Drive via Worker Bridge
+  /// Mengunggah file ke Cloudflare R2 via Worker Bridge
   Future<Map<String, dynamic>> uploadFile(List<int> bytes, String fileName) async {
     try {
       var request = http.MultipartRequest(
